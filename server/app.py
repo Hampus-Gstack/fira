@@ -10,8 +10,9 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(__file__).parent / "data" / "fira.db"
@@ -70,6 +71,13 @@ def init_db():
                 created_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_rsvps_invite ON rsvps(invite_id);
+            CREATE TABLE IF NOT EXISTS photos (
+                id TEXT PRIMARY KEY,
+                mime TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                bound INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            );
             """
         )
 
@@ -123,6 +131,7 @@ def create_invite(body: InviteIn, request: Request):
             "INSERT INTO invites (id, admin_key, data, created_at, updated_at) VALUES (?,?,?,?,?)",
             (invite_id, admin_key, raw, now, now),
         )
+        _bind_photo(conn, body.data)
     return {"id": invite_id, "admin_key": admin_key}
 
 
@@ -163,6 +172,7 @@ def update_invite(
             "UPDATE invites SET data=?, updated_at=? WHERE id=?",
             (raw, int(time.time()), invite_id),
         )
+        _bind_photo(conn, body.data)
     return {"ok": True}
 
 
@@ -214,6 +224,49 @@ def list_rsvps(invite_id: str, x_admin_key: str | None = Header(default=None)):
             for r in rows
         ]
     }
+
+
+MAX_PHOTO_BYTES = 2_500_000
+PHOTO_MAGIC = {b"\xff\xd8\xff": "image/jpeg", b"\x89PNG": "image/png", b"RIFF": "image/webp"}
+
+
+@app.post("/api/photos")
+async def upload_photo(file: UploadFile, request: Request):
+    rate_limit(request, limit=10)
+    blob = await file.read()
+    if len(blob) > MAX_PHOTO_BYTES:
+        raise HTTPException(413, "Photo too large (max 2.5MB)")
+    mime = next((m for magic, m in PHOTO_MAGIC.items() if blob.startswith(magic)), None)
+    if not mime:
+        raise HTTPException(415, "Only JPEG, PNG or WebP")
+    photo_id = secrets.token_urlsafe(9)
+    now = int(time.time())
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO photos (id, mime, bytes, bound, created_at) VALUES (?,?,?,0,?)",
+            (photo_id, mime, blob, now),
+        )
+        # purge orphans: never bound to an invite and older than a day
+        conn.execute("DELETE FROM photos WHERE bound=0 AND created_at < ?", (now - 86400,))
+    return {"id": photo_id}
+
+
+@app.get("/api/photos/{photo_id}")
+def get_photo(photo_id: str):
+    with db() as conn:
+        row = conn.execute("SELECT mime, bytes FROM photos WHERE id=?", (photo_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Not found")
+    return Response(
+        content=row["bytes"], media_type=row["mime"],
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+def _bind_photo(conn, data: dict):
+    pid = data.get("photoId")
+    if pid:
+        conn.execute("UPDATE photos SET bound=1 WHERE id=?", (pid,))
 
 
 @app.delete("/api/invites/{invite_id}")

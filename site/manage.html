@@ -86,6 +86,14 @@
         <div class="stat"><b>${guests}</b><span>Guests coming</span></div>
         <div class="stat"><b>${rsvps.length}</b><span>Total replies</span></div>
       </div>
+      <details style="margin:0 0 26px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:6px 20px">
+        <summary style="cursor:pointer;font-weight:600;padding:12px 0">✉️ Personalized guest links <span style="font-weight:400;color:var(--ink-soft);font-size:13px">— the envelope greets each guest by name</span></summary>
+        <div style="padding:6px 0 16px">
+          <textarea id="plNames" rows="3" placeholder="One guest or family per line:&#10;Anna & Johan&#10;Familjen Berg" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-family:var(--body);font-size:14px;box-sizing:border-box"></textarea>
+          <button class="btn btn-ghost" id="plGen" style="margin-top:10px;padding:9px 20px;font-size:14px">Generate links</button>
+          <div id="plOut" style="margin-top:12px;display:grid;gap:6px"></div>
+        </div>
+      </details>
       ${rsvps.length ? `
       <div style="overflow-x:auto"><table class="dash-table">
         <thead><tr><th>Guest</th><th>Reply</th><th>Party</th>${qLabels.map((q) => `<th>${esc(q)}</th>`).join("")}<th>Message</th><th>When</th></tr></thead>
@@ -108,6 +116,19 @@
       setTimeout(() => (document.getElementById("copyLink").textContent = "Copy guest link"), 1500);
     });
     document.getElementById("refreshBtn").addEventListener("click", () => location.reload());
+    document.getElementById("plGen").addEventListener("click", () => {
+      const out = document.getElementById("plOut");
+      const names = document.getElementById("plNames").value.split("\n").map((s) => s.trim()).filter(Boolean);
+      out.innerHTML = names.map((n) =>
+        `<div style="display:flex;gap:8px;align-items:center">
+          <input readonly value="${esc(shareUrl + "&to=" + encodeURIComponent(n))}" style="flex:1;padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px">
+          <button class="btn btn-ghost" data-pl="${esc(n)}" style="padding:7px 14px;font-size:13px">Copy</button>
+        </div>`).join("") || '<p style="font-size:13px;color:var(--ink-soft)">Add at least one name above.</p>';
+      out.querySelectorAll("[data-pl]").forEach((b) => b.addEventListener("click", () => {
+        navigator.clipboard.writeText(shareUrl + "&to=" + encodeURIComponent(b.dataset.pl));
+        b.textContent = "Copied!"; setTimeout(() => (b.textContent = "Copy"), 1400);
+      }));
+    });
     document.getElementById("csvBtn").addEventListener("click", () => {
       const head = ["Guest", "Reply", "Party size", ...qLabels, "Message", "Date"];
       const cell = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';

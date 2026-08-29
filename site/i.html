@@ -30,6 +30,7 @@
   const demo = params.get("demo");
   const embed = params.get("embed") === "1";
   const id = params.get("id") || (location.hash ? location.hash.slice(1) : "");
+  const guestName = (params.get("to") || "").trim().slice(0, 80) || null;
 
   function fail(msg) {
     mount.innerHTML = `<div class="load-state"><div>
@@ -41,7 +42,7 @@
     if (demo && FIRA_SAMPLES[demo]) {
       const data = JSON.parse(JSON.stringify(FIRA_SAMPLES[demo]));
       document.title = data.title + " ✦ Fira";
-      FiraInvite.render(data, mount, { skipEnvelope: embed, noRsvp: false, inviteId: null });
+      FiraInvite.render(data, mount, { skipEnvelope: embed, noRsvp: false, inviteId: null, guestName });
       return;
     }
     if (!id) return fail("This invitation link is incomplete.");
@@ -49,7 +50,7 @@
     const data = res.data;
     data._id = id;
     document.title = (data.title || "You're invited") + " ✦ Fira";
-    FiraInvite.render(data, mount, { inviteId: id });
+    FiraInvite.render(data, mount, { inviteId: id, guestName });
   } catch (err) {
     fail(err.status === 404 ? "This invitation doesn't exist (or was removed)." : "Couldn't load the invitation. Check your connection and refresh.");
   }
