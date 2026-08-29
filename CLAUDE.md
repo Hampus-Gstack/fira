@@ -14,7 +14,8 @@ Animated digital invitations SaaS (own product, own brand). See `README.md` for 
 ## Rules
 
 - Frontend is deliberately buildless vanilla JS — keep it that way; no npm, no bundler.
-- New theme = entry in `site/js/templates.js` (+ sample in `FIRA_SAMPLES`) + `.theme-<id>` block in `site/css/invite.css`. Nothing else.
+- New theme = entry in `site/js/templates.js` implementing `intro(stage,data,done,U)` + `scenes(data,opts,U)` (+ sample in `FIRA_SAMPLES`) + `.theme-<id>` block in `site/css/invite.css`. Compose the shared partials in `U` (details/schedule/rsvp/photo/foot); the intro and hero art are what make a theme bespoke — never ship a recolored skeleton.
+- Guest personalization: `i.html?id=X&to=Name` — envelope/intro greets by name, RSVP prefills. Photos: editor downscales to ≤1600px JPEG client-side → `POST /api/photos` → `data.photoId`.
 - After any backend change, redeploy AND `curl https://fira.cursuscapital.co/api/health`.
 - The editor preview iframe rewrites itself via `document.write` + postMessage — test `create.html` in a browser after touching invite-core/templates.
 - Payments are NOT wired (beta = free). Before adding Stripe or any paid integration: ask Hampus.
