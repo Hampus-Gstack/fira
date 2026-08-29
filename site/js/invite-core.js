@@ -1,7 +1,6 @@
-// Fira invitation engine v2 — cinematic per-theme intros and bespoke scenes.
-// Themes (FIRA_TEMPLATES) implement: intro(stage, data, done, U),
-// scenes(data, opts, U) -> html, optional decorate(stage, U) and
-// after(wrap, data, opts, U). Shared craft lives here.
+// Fira invitation engine v3 — full-viewport wax-seal envelope, fullscreen,
+// scroll-driven story chapters. Themes contribute identity (fonts, colors,
+// labels) and art hooks; the cinematic structure lives here.
 (function () {
   const esc = (s) =>
     String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
@@ -17,6 +16,16 @@
     return d.toLocaleDateString(lang || "en-GB", {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
+  }
+
+  // Seal monogram from explicit sealText, or derived from the title:
+  // "Alma & Theo" -> "A·T", otherwise first letter.
+  function monogram(data) {
+    if (data.sealText) return String(data.sealText).slice(0, 3);
+    const t = (data.title || "").trim();
+    const parts = t.split(/\s*(?:&|\+|and|och)\s*/i).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + "·" + parts[1][0]).toUpperCase();
+    return (t[0] || "F").toUpperCase();
   }
 
   // ---------- countdown ----------
@@ -82,7 +91,7 @@
     host.appendChild(box);
   }
 
-  // ---------- confetti cannon (canvas) ----------
+  // ---------- confetti cannon ----------
   function celebrate(colors, origin) {
     if (REDUCED) return;
     const cv = document.createElement("canvas");
@@ -124,7 +133,7 @@
     })();
   }
 
-  // ---------- pointer / gyro parallax on [data-depth] ----------
+  // ---------- pointer / gyro parallax ----------
   function parallax(stage) {
     if (REDUCED) return;
     const els = () => stage.querySelectorAll("[data-depth]");
@@ -133,7 +142,7 @@
       cx += (tx - cx) * 0.06; cy += (ty - cy) * 0.06;
       els().forEach((el) => {
         const d = parseFloat(el.dataset.depth) || 1;
-        el.style.transform = `translate3d(${cx * d}px, ${cy * d}px, 0)`;
+        el.style.translate = `${cx * d}px ${cy * d}px`;
       });
       if (Math.abs(tx - cx) > 0.1 || Math.abs(ty - cy) > 0.1) requestAnimationFrame(apply);
       else running = false;
@@ -152,70 +161,149 @@
     }, { passive: true });
   }
 
-  // ---------- typewriter ----------
-  function typewriter(el, lines, speed, done) {
-    let li = 0, ci = 0;
-    (function step() {
-      if (li >= lines.length) { done && done(); return; }
-      const line = lines[li];
-      if (ci === 0) {
-        el.insertAdjacentHTML("beforeend", `<div class="tw-line"></div>`);
+  // ---------- scroll-story engine ----------
+  // Each .ch gets --p (0 when entering viewport bottom, 1 when leaving top).
+  // A progress bar tracks total scroll.
+  function storyEngine(root) {
+    if (window.__firaStoryCleanup) window.__firaStoryCleanup();
+    const chapters = [...root.querySelectorAll(".ch")];
+    const bar = root.querySelector(".story-progress i");
+    let ticking = false;
+    function update() {
+      ticking = false;
+      const vh = innerHeight;
+      for (const ch of chapters) {
+        const r = ch.getBoundingClientRect();
+        const p = Math.max(0, Math.min(1, (vh - r.top) / (vh + r.height)));
+        ch.style.setProperty("--p", p.toFixed(4));
       }
-      const row = el.lastElementChild;
-      if (ci < line.length) {
-        row.textContent = line.slice(0, ++ci);
-        setTimeout(step, speed + Math.random() * 24);
-      } else {
-        li++; ci = 0;
-        setTimeout(step, 260);
+      if (bar) {
+        const doc = document.documentElement;
+        const max = doc.scrollHeight - vh;
+        bar.style.width = (max > 0 ? (scrollY / max) * 100 : 0).toFixed(2) + "%";
       }
-    })();
+    }
+    const onScroll = () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    };
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("resize", update);
+    window.__firaStoryCleanup = () => {
+      removeEventListener("scroll", onScroll);
+      removeEventListener("resize", update);
+    };
+    update();
   }
 
-  // ---------- shared partials (themes compose these) ----------
-  function photoHtml(data, cls) {
+  function revealOnScroll(root) {
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add("in")),
+      { threshold: 0.12 }
+    );
+    root.querySelectorAll(".reveal").forEach((el, i) => {
+      el.style.setProperty("--stagger", (i % 6) * 90 + "ms");
+      io.observe(el);
+    });
+    if (REDUCED) root.querySelectorAll(".reveal").forEach((el) => el.classList.add("in"));
+  }
+
+  // ---------- fullscreen ----------
+  function tryFullscreen() {
+    const el = document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (fn) { try { fn.call(el).catch(() => {}); } catch (e) {} }
+  }
+  function exitFullscreen() {
+    const fn = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fn) { try { fn.call(document).catch(() => {}); } catch (e) {} }
+  }
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  // ---------- chapter partials ----------
+  function heroChapter(data, theme) {
+    return `
+      <section class="ch ch-hero">
+        <div class="ch-art">${theme.art && theme.art.hero ? theme.art.hero(data) : ""}</div>
+        <div class="ch-inner">
+          <p class="inv-eyebrow hero-seq s1">${esc(data.eventType || theme.labels.eyebrow || "You're invited")}</p>
+          <h1 class="inv-title hero-seq s2 ${theme.titleCls || ""}" ${theme.titleAttr ? `data-text="${esc(data.title || "")}"` : ""}>${esc(data.title || "Your names")}</h1>
+          ${data.subtitle ? `<p class="inv-subtitle hero-seq s3">${esc(data.subtitle)}</p>` : ""}
+          <div class="hero-seq s4">${theme.art && theme.art.divider ? theme.art.divider : ""}</div>
+          <p class="inv-date hero-seq s5">${esc(fmtDate(data.date, data.lang))}${data.time ? " · " + esc(data.time) : ""}</p>
+        </div>
+        <div class="ch-chevron hero-seq s6" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 9l7 7 7-7"/></svg></div>
+      </section>`;
+  }
+
+  function photoChapter(data) {
     if (!data.photoId) return "";
     const src = window.FIRA_CONFIG.API_BASE + "/photos/" + encodeURIComponent(data.photoId);
-    return `<figure class="inv-photo ${cls || ""} reveal"><img src="${esc(src)}" alt=""></figure>`;
+    return `
+      <section class="ch ch-photo">
+        <figure class="ph-frame"><img src="${esc(src)}" alt=""></figure>
+      </section>`;
   }
 
-  function detailsHtml(data, theme) {
-    const mapBtn = data.mapUrl
-      ? `<a class="inv-btn ghost" href="${esc(data.mapUrl)}" target="_blank" rel="noopener">View map</a>` : "";
+  function messageChapter(data, theme) {
+    if (!data.message) return "";
+    const lines = esc(data.message).split("\n").filter(Boolean)
+      .map((l) => `<p class="msg-line reveal">${l}</p>`).join("");
+    return `
+      <section class="ch ch-message">
+        <div class="ch-inner">
+          <div class="msg-mark reveal" aria-hidden="true">${theme.ornament || "✦"}</div>
+          ${lines}
+          ${data.hosts ? `<p class="msg-sig reveal">— ${esc(data.hosts)}</p>` : ""}
+        </div>
+      </section>`;
+  }
+
+  function detailsChapter(data, theme) {
+    const q = [data.venue, data.address].filter(Boolean).join(", ");
+    const map = q
+      ? `<div class="map-card reveal">
+           <iframe title="Map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+             src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=15&output=embed"></iframe>
+         </div>` : "";
+    const mapBtn = (data.mapUrl || q)
+      ? `<a class="inv-btn ghost" href="${esc(data.mapUrl || "https://maps.google.com/?q=" + encodeURIComponent(q))}" target="_blank" rel="noopener">Get directions</a>` : "";
     const ics = icsHref(data);
     const calBtn = ics ? `<a class="inv-btn ghost" href="${ics}" download="fira-event.ics">Add to calendar</a>` : "";
     const songBtn = data.songUrl
       ? `<a class="inv-btn ghost" href="${esc(data.songUrl)}" target="_blank" rel="noopener">${esc(theme.labels.song || "♪ Our song")}</a>` : "";
     return `
-      <p class="inv-date reveal">${esc(fmtDate(data.date, data.lang))}${data.time ? " · " + esc(data.time) : ""}</p>
-      ${data.venue ? `<p class="inv-venue reveal">${esc(data.venue)}</p>` : ""}
-      ${data.address ? `<p class="inv-address reveal">${esc(data.address)}</p>` : ""}
-      <div class="inv-cta reveal">${mapBtn}${calBtn}${songBtn}</div>`;
+      <section class="ch ch-details">
+        <div class="ch-inner">
+          <h2 class="inv-h2 reveal">${esc(theme.labels.details || "When & where")}</h2>
+          <p class="inv-date big reveal">${esc(fmtDate(data.date, data.lang))}</p>
+          ${data.time ? `<p class="inv-time reveal">${esc(data.time)}</p>` : ""}
+          ${data.venue ? `<p class="inv-venue reveal">${esc(data.venue)}</p>` : ""}
+          ${data.address ? `<p class="inv-address reveal">${esc(data.address)}</p>` : ""}
+          ${map}
+          <div class="inv-cta reveal">${mapBtn}${calBtn}${songBtn}</div>
+          <div class="inv-countdown reveal"></div>
+        </div>
+      </section>`;
   }
 
-  function scheduleHtml(data, theme) {
+  function scheduleChapter(data, theme) {
     const schedule = (data.schedule || []).filter((s) => s.label);
     if (!schedule.length) return "";
-    return `<section class="inv-block inv-schedule reveal"><h2 class="inv-h2">${esc(theme.labels.schedule)}</h2>
-      <ol class="inv-timeline">${schedule
-        .map((s) => `<li class="reveal"><span class="tl-time">${esc(s.time || "")}</span><span class="tl-dot" aria-hidden="true"></span><span class="tl-label">${esc(s.label)}</span></li>`)
-        .join("")}</ol></section>`;
+    return `
+      <section class="ch ch-schedule">
+        <div class="ch-inner">
+          <h2 class="inv-h2 reveal">${esc(theme.labels.schedule)}</h2>
+          <ol class="inv-timeline">
+            <i class="tl-line" aria-hidden="true"></i>
+            ${schedule.map((s) => `<li class="reveal"><span class="tl-time">${esc(s.time || "")}</span><span class="tl-dot" aria-hidden="true"></span><span class="tl-label">${esc(s.label)}</span></li>`).join("")}
+          </ol>
+        </div>
+      </section>`;
   }
 
-  function messageHtml(data) {
-    return data.message
-      ? `<section class="inv-block inv-message reveal"><p>${esc(data.message).replace(/\n/g, "<br>")}</p></section>` : "";
-  }
-
-  function footHtml(data, theme, opts) {
-    return `<footer class="inv-foot">
-      ${data.hosts ? `<p class="reveal">${esc(theme.labels.hostedBy)} ${esc(data.hosts)}</p>` : ""}
-      <a class="inv-fira" href="${opts.brandHref || "index.html"}" target="_blank" rel="noopener">Made with Fira</a>
-    </footer>`;
-  }
-
-  // ---------- RSVP ----------
-  function rsvpHtml(data, opts) {
+  function rsvpChapter(data, opts, theme) {
     if (opts.noRsvp) return "";
     const qs = (data.questions || [])
       .map((q, i) => {
@@ -230,23 +318,29 @@
       ? `<p class="rf-deadline">Please reply by ${esc(fmtDate(data.rsvpDeadline, data.lang))}</p>` : "";
     const guest = opts.guestName ? esc(opts.guestName) : "";
     return `
-      <section class="inv-block inv-rsvp reveal">
-        <h2 class="inv-h2">RSVP</h2>
-        ${deadline}
-        <form class="rf" novalidate>
-          <label class="rf-field"><span>Your name</span><input type="text" name="guest_name" required maxlength="120" value="${guest}"></label>
-          <div class="rf-attend" role="radiogroup">
-            <label><input type="radio" name="attending" value="yes" checked><i></i>Joyfully accepts</label>
-            <label><input type="radio" name="attending" value="no"><i></i>Regretfully declines</label>
-          </div>
-          <label class="rf-field"><span>Number of guests (including you)</span>
-            <input type="number" name="party_size" min="1" max="20" value="1"></label>
-          ${qs}
-          <label class="rf-field"><span>Message to the hosts (optional)</span>
-            <textarea name="message" rows="2" maxlength="1000"></textarea></label>
-          <button type="submit" class="rf-send">Send RSVP</button>
-          <p class="rf-status" aria-live="polite"></p>
-        </form>
+      <section class="ch ch-rsvp" id="rsvp">
+        <div class="ch-inner">
+          <h2 class="inv-h2 reveal">RSVP</h2>
+          ${deadline}
+          <form class="rf reveal" novalidate>
+            <label class="rf-field"><span>Your name</span><input type="text" name="guest_name" required maxlength="120" value="${guest}"></label>
+            <div class="rf-attend" role="radiogroup">
+              <label><input type="radio" name="attending" value="yes" checked><i></i>Joyfully accepts</label>
+              <label><input type="radio" name="attending" value="no"><i></i>Regretfully declines</label>
+            </div>
+            <label class="rf-field"><span>Number of guests (including you)</span>
+              <input type="number" name="party_size" min="1" max="20" value="1"></label>
+            ${qs}
+            <label class="rf-field"><span>Message to the hosts (optional)</span>
+              <textarea name="message" rows="2" maxlength="1000"></textarea></label>
+            <button type="submit" class="rf-send">Send RSVP</button>
+            <p class="rf-status" aria-live="polite"></p>
+          </form>
+          <footer class="inv-foot">
+            ${data.hosts ? `<p>${esc(theme.labels.hostedBy)} ${esc(data.hosts)}</p>` : ""}
+            <a class="inv-fira" href="${opts.brandHref || "index.html"}" target="_blank" rel="noopener">Made with Fira</a>
+          </footer>
+        </div>
       </section>`;
   }
 
@@ -280,6 +374,7 @@
         form.innerHTML = yes
           ? `<p class="rf-done">See you there, ${esc(name)}! ✦</p>`
           : `<p class="rf-done">Thank you for letting us know, ${esc(name)}. You'll be missed.</p>`;
+        document.querySelector(".cta-pill")?.remove();
         if (yes) celebrate(theme.swatch.concat(["#FFFFFF"]), { x: r.left + r.width / 2, y: r.top });
       } catch (err) {
         status.textContent = err.message || "Could not send. Try again.";
@@ -288,57 +383,146 @@
     });
   }
 
-  function revealOnScroll(root) {
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add("in")),
-      { threshold: 0.12 }
-    );
-    root.querySelectorAll(".reveal").forEach((el, i) => {
-      el.style.setProperty("--stagger", (i % 6) * 90 + "ms");
-      io.observe(el);
-    });
-    if (REDUCED) root.querySelectorAll(".reveal").forEach((el) => el.classList.add("in"));
+  // ---------- wax-seal envelope (full viewport) ----------
+  function sealSvg(initials) {
+    // Irregular wax blob + embossed monogram. Original artwork.
+    return `
+    <svg viewBox="0 0 120 120" class="seal-svg" aria-hidden="true">
+      <defs>
+        <radialGradient id="wax" cx="42%" cy="36%" r="72%">
+          <stop offset="0%" stop-color="var(--seal-hi)"/>
+          <stop offset="55%" stop-color="var(--seal-md)"/>
+          <stop offset="100%" stop-color="var(--seal-lo)"/>
+        </radialGradient>
+      </defs>
+      <path class="seal-blob" fill="url(#wax)" d="M60,6
+        C78,4 94,14 102,28 C110,42 114,58 108,74 C102,90 88,102 72,108
+        C56,114 38,110 26,100 C14,90 6,74 8,58 C10,42 18,28 30,18 C40,10 48,8 60,6 Z"/>
+      <path fill="none" stroke="var(--seal-lo)" stroke-width="1.6" opacity="0.55" d="M60,18
+        C74,16 86,24 92,35 C98,46 101,58 96,70 C91,82 80,91 68,95 C54,99 40,96 31,88
+        C22,80 16,68 18,56 C20,44 26,33 36,26 C44,20 50,19 60,18 Z"/>
+      <text x="60" y="72" text-anchor="middle" class="seal-mono">${esc(initials)}</text>
+      <ellipse cx="42" cy="30" rx="14" ry="7" fill="#fff" opacity="0.18" transform="rotate(-24 42 30)"/>
+    </svg>`;
   }
 
-  // Utility belt handed to every theme hook.
-  const U = {
-    esc, fmtDate, icsHref, particles, celebrate, parallax, typewriter, countdown,
-    photoHtml, detailsHtml, scheduleHtml, messageHtml, footHtml, rsvpHtml,
-    reduced: REDUCED,
-  };
+  function envelope(mount, data, theme, opts, onOpen) {
+    const initials = monogram(data);
+    const addr = opts.guestName
+      ? `For ${esc(opts.guestName)}`
+      : esc(data.envelopeTeaser || theme.labels.teaser || "You are invited");
+    const env = document.createElement("div");
+    env.className = "env3";
+    env.innerHTML = `
+      <div class="env3-paper">
+        <div class="env3-grain"></div>
+        <div class="env3-border"></div>
+        <div class="env3-flap"><div class="env3-flap-inner"></div></div>
+        <p class="env3-addr">${addr}</p>
+        <div class="env3-sealwrap">
+          <button class="env3-seal" aria-label="Break the seal and open the invitation">${sealSvg(initials)}</button>
+          <div class="env3-half l" aria-hidden="true">${sealSvg(initials)}</div>
+          <div class="env3-half r" aria-hidden="true">${sealSvg(initials)}</div>
+        </div>
+        <p class="env3-hint">Tap the seal to open</p>
+      </div>`;
+    mount.appendChild(env);
+
+    let opened = false;
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
+      if (!opts.noFullscreen) tryFullscreen();
+      env.classList.add("sealing");                            // press down
+      setTimeout(() => env.classList.add("cracked"), 260);     // halves break away
+      setTimeout(() => env.classList.add("unfolding"), 760);   // flap opens in 3D
+      setTimeout(() => { env.classList.add("lifting"); onOpen(); }, 1500); // letter takes over
+      setTimeout(() => env.remove(), 2600);
+    };
+    env.querySelector(".env3-seal").addEventListener("click", (e) => { e.stopPropagation(); open(); });
+    env.addEventListener("click", open);
+    return env;
+  }
 
   // ---------- public render ----------
-  // opts: { inviteId, skipEnvelope, noRsvp, brandHref, guestName }
+  // opts: { inviteId, skipEnvelope, noRsvp, brandHref, guestName, noFullscreen }
   function render(data, mount, opts = {}) {
     const theme = window.FIRA_TEMPLATES[data.template] || window.FIRA_TEMPLATES.botanical;
     mount.innerHTML = "";
+    document.querySelectorAll(".cta-pill, .fs-toggle, .celebrate-canvas").forEach((el) => el.remove());
     mount.className = "inv-root theme-" + theme.id;
     if (theme.fonts && !document.getElementById("f-" + theme.id)) {
       const l = document.createElement("link");
       l.id = "f-" + theme.id; l.rel = "stylesheet"; l.href = theme.fonts;
       document.head.appendChild(l);
     }
+    // immersive mobile chrome
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.appendChild(meta);
+    }
+    meta.content = theme.envTint ? theme.envTint.paper : "#F3EBDD";
+
     const stage = document.createElement("div");
     stage.className = "inv-stage";
     mount.appendChild(stage);
 
-    const showInvite = () => {
-      if (stage.querySelector(".inv-body")) return;
+    const showStory = () => {
+      if (stage.querySelector(".story")) return;
       if (theme.decorate) theme.decorate(stage, U);
       parallax(stage);
       const wrap = document.createElement("div");
-      wrap.className = "inv-body";
-      wrap.innerHTML = theme.scenes(data, opts, U);
+      wrap.className = "story";
+      wrap.innerHTML = `
+        <div class="story-progress" aria-hidden="true"><i></i></div>
+        ${heroChapter(data, theme)}
+        ${photoChapter(data)}
+        ${messageChapter(data, theme)}
+        ${detailsChapter(data, theme)}
+        ${scheduleChapter(data, theme)}
+        ${rsvpChapter(data, opts, theme)}`;
       stage.appendChild(wrap);
       countdown(wrap.querySelector(".inv-countdown"), data.date, data.time);
       wireRsvp(wrap, data, opts, theme);
       revealOnScroll(wrap);
+      storyEngine(wrap);
       if (theme.after) theme.after(wrap, data, opts, U);
+
+      // persistent CTA pill + fullscreen toggle
+      if (!opts.noRsvp && wrap.querySelector("#rsvp")) {
+        const pill = document.createElement("button");
+        pill.className = "cta-pill";
+        pill.textContent = theme.labels.cta || "Confirm attendance";
+        pill.addEventListener("click", () =>
+          wrap.querySelector("#rsvp").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth" }));
+        stage.appendChild(pill);
+        setTimeout(() => pill.classList.add("show"), 2400);
+        new IntersectionObserver((es) =>
+          es.forEach((e) => pill.classList.toggle("hide", e.isIntersecting)),
+          { threshold: 0.2 }
+        ).observe(wrap.querySelector("#rsvp"));
+      }
+      if (!opts.skipEnvelope && !opts.noFullscreen) {
+        const fs = document.createElement("button");
+        fs.className = "fs-toggle";
+        fs.setAttribute("aria-label", "Toggle fullscreen");
+        fs.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>`;
+        fs.addEventListener("click", () => (isFullscreen() ? exitFullscreen() : tryFullscreen()));
+        stage.appendChild(fs);
+      }
     };
 
-    if (opts.skipEnvelope || REDUCED) showInvite();
-    else theme.intro(stage, data, showInvite, Object.assign({ guestName: opts.guestName }, U));
+    if (opts.skipEnvelope || REDUCED) { showStory(); return; }
+    envelope(stage, data, theme, opts, showStory);
   }
+
+  const U = {
+    esc, fmtDate, icsHref, particles, celebrate, parallax, countdown,
+    reduced: REDUCED,
+  };
 
   window.FiraInvite = { render, esc, fmtDate };
 })();
