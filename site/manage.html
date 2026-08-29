@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Host dashboard ✦ Fira</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23C25A3A'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Georgia' font-size='34' fill='%23FAF6EF'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html"><span class="seal-dot">F</span>Fira</a>
+  <div class="nav-links"><a class="btn btn-primary" href="create.html">New invitation</a></div>
+</nav>
+
+<div class="dash" id="dash">
+  <div class="dash-empty"><p>Loading…</p></div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/templates.js"></script>
+<script>
+(async function () {
+  const dash = document.getElementById("dash");
+  const params = new URLSearchParams(location.search);
+  const id = params.get("id");
+  const key = params.get("key") || (id && (FiraVault.get(id) || {}).admin_key);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // ---------- no id: list invitations saved on this device ----------
+  if (!id) {
+    const mine = FiraVault.all();
+    dash.innerHTML = `<h1>My invitations</h1>` + (mine.length
+      ? `<ul class="my-invites">` + mine.map((m) => `
+          <li><div><b>${esc(m.title || m.id)}</b><br><span style="font-size:13px;color:var(--ink-soft)">${esc((FIRA_TEMPLATES[m.template] || {}).name || "")}${m.date ? " · " + esc(m.date) : ""}</span></div>
+          <div style="display:flex;gap:8px">
+            <a class="btn btn-ghost" style="padding:8px 16px;font-size:13px" href="manage.html?id=${encodeURIComponent(m.id)}&key=${encodeURIComponent(m.admin_key)}">Dashboard</a>
+            <a class="btn btn-ghost" style="padding:8px 16px;font-size:13px" href="i.html?id=${encodeURIComponent(m.id)}" target="_blank">View</a>
+          </div></li>`).join("") + `</ul>
+          <p style="font-size:13px;color:var(--ink-soft)">Saved in this browser only. Your private dashboard links keep working anywhere — bookmark them.</p>`
+      : `<div class="dash-empty"><p>No invitations on this device yet.</p><a class="btn btn-primary" href="create.html">Create your first invitation</a></div>`);
+    return;
+  }
+
+  if (!key) {
+    dash.innerHTML = `<div class="dash-empty"><p>This dashboard needs your private host link (the one with the key).</p></div>`;
+    return;
+  }
+
+  // ---------- full dashboard ----------
+  try {
+    const [inviteRes, rsvpRes] = await Promise.all([
+      FiraAPI.getInvite(id),
+      FiraAPI.listRsvps(id, key),
+    ]);
+    const data = inviteRes.data;
+    const rsvps = rsvpRes.rsvps;
+    FiraVault.save({ id, admin_key: key, title: data.title, template: data.template, date: data.date });
+
+    const yes = rsvps.filter((r) => r.attending === "yes");
+    const no = rsvps.filter((r) => r.attending === "no");
+    const guests = yes.reduce((n, r) => n + (r.party_size || 1), 0);
+    const base = location.href.replace(/manage\.html.*$/, "");
+    const shareUrl = base + "i.html?id=" + id;
+    const qLabels = [...new Set(rsvps.flatMap((r) => Object.keys(r.answers || {})))];
+
+    dash.innerHTML = `
+      <h1>${esc(data.title || "Your event")}</h1>
+      <p style="color:var(--ink-soft);margin-top:-8px">${esc(data.eventType || "")}${data.date ? " · " + esc(data.date) : ""}${data.venue ? " · " + esc(data.venue) : ""}</p>
+      <div class="dash-tools">
+        <button class="btn btn-primary" id="copyLink">Copy guest link</button>
+        <a class="btn btn-ghost" href="i.html?id=${encodeURIComponent(id)}" target="_blank">View invitation</a>
+        <a class="btn btn-ghost" href="create.html?edit=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}">Edit invitation</a>
+        <button class="btn btn-ghost" id="csvBtn">Export CSV</button>
+        <button class="btn btn-ghost" id="refreshBtn">↻ Refresh</button>
+      </div>
+      <div class="stat-row">
+        <div class="stat s-yes"><b>${yes.length}</b><span>Yes</span></div>
+        <div class="stat s-no"><b>${no.length}</b><span>No</span></div>
+        <div class="stat"><b>${guests}</b><span>Guests coming</span></div>
+        <div class="stat"><b>${rsvps.length}</b><span>Total replies</span></div>
+      </div>
+      ${rsvps.length ? `
+      <div style="overflow-x:auto"><table class="dash-table">
+        <thead><tr><th>Guest</th><th>Reply</th><th>Party</th>${qLabels.map((q) => `<th>${esc(q)}</th>`).join("")}<th>Message</th><th>When</th></tr></thead>
+        <tbody>${rsvps.map((r) => `
+          <tr>
+            <td><b>${esc(r.guest_name)}</b></td>
+            <td><span class="pill ${r.attending === "yes" ? "pill-yes" : "pill-no"}">${r.attending === "yes" ? "Coming" : "Declined"}</span></td>
+            <td>${r.party_size}</td>
+            ${qLabels.map((q) => `<td>${esc((r.answers || {})[q] || "—")}</td>`).join("")}
+            <td>${esc(r.message || "—")}</td>
+            <td style="white-space:nowrap;color:var(--ink-soft);font-size:13px">${new Date(r.created_at * 1000).toLocaleDateString()}</td>
+          </tr>`).join("")}
+        </tbody></table></div>`
+      : `<div class="dash-empty"><p>No replies yet. Share your guest link and watch this page fill up ✦</p></div>`}
+    `;
+
+    document.getElementById("copyLink").addEventListener("click", () => {
+      navigator.clipboard.writeText(shareUrl);
+      document.getElementById("copyLink").textContent = "Copied!";
+      setTimeout(() => (document.getElementById("copyLink").textContent = "Copy guest link"), 1500);
+    });
+    document.getElementById("refreshBtn").addEventListener("click", () => location.reload());
+    document.getElementById("csvBtn").addEventListener("click", () => {
+      const head = ["Guest", "Reply", "Party size", ...qLabels, "Message", "Date"];
+      const cell = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+      const rows = rsvps.map((r) => [
+        r.guest_name, r.attending, r.party_size,
+        ...qLabels.map((q) => (r.answers || {})[q] || ""),
+        r.message, new Date(r.created_at * 1000).toISOString().slice(0, 10),
+      ].map(cell).join(","));
+      const blob = new Blob([head.map(cell).join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "fira-guests-" + id + ".csv";
+      a.click();
+    });
+  } catch (err) {
+    dash.innerHTML = `<div class="dash-empty"><p>${err.status === 403 || err.status === 401 ? "That host key isn't valid for this invitation." : "Couldn't load the dashboard — check your connection."}</p></div>`;
+  }
+})();
+</script>
+</body>
+</html>

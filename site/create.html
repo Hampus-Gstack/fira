@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create your invitation ✦ Fira</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23C25A3A'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Georgia' font-size='34' fill='%23FAF6EF'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html"><span class="seal-dot">F</span>Fira</a>
+  <div class="nav-links">
+    <a href="manage.html">My invitations</a>
+  </div>
+</nav>
+
+<div class="editor-shell">
+  <div class="editor-pane">
+    <h1 id="edHeading">Create your invitation</h1>
+    <p style="color:var(--ink-soft);margin-top:-6px">Everything updates live in the preview →</p>
+
+    <div class="ed-section" style="border-top:0;margin-top:10px;padding-top:0">
+      <h2>Theme</h2>
+      <div class="tpl-picker" id="tplPicker"></div>
+    </div>
+
+    <div class="ed-section">
+      <h2>The essentials</h2>
+      <div class="ed-field"><label>Occasion line</label><input id="f_eventType" placeholder="Wedding · Birthday party · …"></div>
+      <div class="ed-field"><label>Main title (names / headline)</label><input id="f_title" placeholder="Alma & Theo"></div>
+      <div class="ed-field"><label>Subtitle</label><input id="f_subtitle" placeholder="are getting married"></div>
+      <div class="ed-row">
+        <div class="ed-field"><label>Date</label><input id="f_date" type="date"></div>
+        <div class="ed-field"><label>Time</label><input id="f_time" type="time"></div>
+      </div>
+      <div class="ed-field"><label>Venue</label><input id="f_venue" placeholder="Rosendal Orangery"></div>
+      <div class="ed-field"><label>Address</label><input id="f_address" placeholder="Rosendalsvägen 38, Stockholm"></div>
+      <div class="ed-field"><label>Google Maps link (optional)</label><input id="f_mapUrl" type="url" placeholder="https://maps.google.com/…"></div>
+      <div class="ed-field"><label>Personal message</label><textarea id="f_message" rows="4" placeholder="A few warm lines to your guests…"></textarea></div>
+      <div class="ed-field"><label>Hosted by</label><input id="f_hosts" placeholder="Alma & Theo"></div>
+      <div class="ed-field"><label>Envelope teaser (shown on the sealed envelope)</label><input id="f_envelopeTeaser" placeholder="You are warmly invited"></div>
+    </div>
+
+    <div class="ed-section">
+      <h2>Schedule <span style="font-weight:400;font-size:13px;color:var(--ink-soft)">(optional)</span></h2>
+      <div id="schedList"></div>
+      <button class="ed-add" id="schedAdd" type="button">+ Add a moment</button>
+    </div>
+
+    <div class="ed-section">
+      <h2>RSVP</h2>
+      <div class="ed-field"><label>Reply-by date (optional)</label><input id="f_rsvpDeadline" type="date"></div>
+      <label style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft)">Extra questions for guests</label>
+      <div id="qList" style="margin-top:8px"></div>
+      <button class="ed-add" id="qAdd" type="button">+ Add a question (e.g. meal choice)</button>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:8px">Tip: separate choice options with commas — leave options empty for a free-text answer.</p>
+    </div>
+
+    <div class="publish-bar">
+      <button class="btn btn-primary btn-big" id="publishBtn" type="button">Publish invitation</button>
+      <span class="publish-status" id="publishStatus"></span>
+    </div>
+  </div>
+
+  <div class="preview-pane">
+    <div class="preview-tools">
+      <button class="btn btn-ghost" id="replayBtn" type="button" style="padding:8px 18px;font-size:13px">↺ Replay envelope</button>
+    </div>
+    <iframe class="preview-frame" id="previewFrame" title="Live preview"></iframe>
+  </div>
+</div>
+
+<div class="share-modal" id="shareModal" hidden>
+  <div class="share-card">
+    <h2>It's live! 🎉</h2>
+    <p class="share-note">Send this link to your guests — it opens straight into the sealed envelope.</p>
+    <div class="share-link">
+      <input id="shareUrl" readonly>
+      <button class="btn btn-primary" id="copyShare" type="button">Copy</button>
+    </div>
+    <div class="share-link">
+      <input id="manageUrl" readonly>
+      <button class="btn btn-ghost" id="copyManage" type="button">Copy</button>
+    </div>
+    <p class="share-note">↑ Your <b>private host link</b> — RSVPs, guest list, editing.</p>
+    <div class="share-warn">⚠️ Keep the host link to yourself. Anyone with it can see your guest list and edit the invitation. We've also saved it under <a href="manage.html">My invitations</a> on this device.</div>
+    <p style="margin-top:22px"><a class="btn btn-ghost" id="viewLive" href="#" target="_blank">Open live invitation</a>
+    <button class="btn btn-primary" id="goDash" type="button">Go to dashboard</button></p>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/templates.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const fields = ["eventType","title","subtitle","date","time","venue","address","mapUrl","message","hosts","envelopeTeaser","rsvpDeadline"];
+  let currentTpl = "botanical";
+  let schedule = [];
+  let questions = [];
+  let editing = null; // {id, admin_key} when editing an existing invite
+
+  // ---- edit mode: ?edit=<id> pulls admin key from vault ----
+  const editId = new URLSearchParams(location.search).get("edit");
+
+  function collect() {
+    const data = { template: currentTpl };
+    fields.forEach((f) => { data[f] = $("f_" + f).value.trim(); });
+    data.schedule = schedule.filter((s) => s.label);
+    data.questions = questions
+      .filter((q) => q.label)
+      .map((q) => {
+        const opts = (q.optionsRaw || "").split(",").map((s) => s.trim()).filter(Boolean);
+        return opts.length ? { type: "choice", label: q.label, options: opts } : { type: "text", label: q.label };
+      });
+    return data;
+  }
+
+  function fill(data) {
+    currentTpl = data.template || "botanical";
+    fields.forEach((f) => { $("f_" + f).value = data[f] || ""; });
+    schedule = (data.schedule || []).map((s) => ({ time: s.time || "", label: s.label || "" }));
+    questions = (data.questions || []).map((q) => ({
+      label: q.label || "", optionsRaw: (q.options || []).join(", "),
+    }));
+    renderTplPicker(); renderSched(); renderQs();
+  }
+
+  // ---- live preview (postMessage into i.html-less inline doc) ----
+  const frame = $("previewFrame");
+  let frameReady = false;
+  function initFrame(replay) {
+    frameReady = false;
+    const doc = frame.contentDocument;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="stylesheet" href="css/invite.css"><style>body{margin:0}<\/style></head><body><div id="m"></div>
+      <script src="js/config.js"><\/script><script src="js/api.js"><\/script>
+      <script src="js/templates.js"><\/script><script src="js/invite-core.js"><\/script>
+      <script>window.addEventListener("message",function(e){
+        if(!e.data||e.data.type!=="fira-preview")return;
+        FiraInvite.render(e.data.data, document.getElementById("m"), {skipEnvelope:!e.data.envelope, noRsvp:false, inviteId:null});
+      });parent.postMessage({type:"fira-ready"},"*");<\/script></body></html>`);
+    doc.close();
+  }
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "fira-ready") {
+      frameReady = true;
+      push(pendingEnvelope);
+      pendingEnvelope = false;
+    }
+  });
+  let pendingEnvelope = false;
+  let pushTimer = null;
+  function push(envelope) {
+    if (!frameReady) { pendingEnvelope = envelope; return; }
+    frame.contentWindow.postMessage({ type: "fira-preview", data: collect(), envelope: !!envelope }, "*");
+  }
+  function schedulePush() { clearTimeout(pushTimer); pushTimer = setTimeout(() => push(false), 250); }
+
+  $("replayBtn").addEventListener("click", () => { initFrame(); pendingEnvelope = true; });
+
+  // ---- theme picker ----
+  function renderTplPicker() {
+    const el = $("tplPicker");
+    el.innerHTML = "";
+    Object.values(FIRA_TEMPLATES).forEach((t) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tpl-chip" + (t.id === currentTpl ? " on" : "");
+      b.innerHTML = `<span class="tc-sw">${t.swatch.map((c) => `<i style="background:${c}"></i>`).join("")}</span>
+        <span class="tc-name">${t.name}</span><span class="tc-occ">${t.occasion}</span>`;
+      b.addEventListener("click", () => {
+        const wasEmpty = !$("f_title").value.trim();
+        currentTpl = t.id;
+        if (wasEmpty && !editing) fill(JSON.parse(JSON.stringify(FIRA_SAMPLES[t.id])));
+        renderTplPicker();
+        push(false);
+      });
+      el.appendChild(b);
+    });
+  }
+
+  // ---- schedule rows ----
+  function renderSched() {
+    const el = $("schedList");
+    el.innerHTML = "";
+    schedule.forEach((s, i) => {
+      const row = document.createElement("div");
+      row.className = "ed-list-row";
+      row.innerHTML = `<input type="time" value="${s.time}"><input placeholder="What happens" value="${s.label.replace(/"/g, "&quot;")}"><button class="ed-x" type="button">✕</button>`;
+      const [t, l, x] = row.children;
+      t.addEventListener("input", () => { s.time = t.value; schedulePush(); });
+      l.addEventListener("input", () => { s.label = l.value; schedulePush(); });
+      x.addEventListener("click", () => { schedule.splice(i, 1); renderSched(); schedulePush(); });
+      el.appendChild(row);
+    });
+  }
+  $("schedAdd").addEventListener("click", () => { schedule.push({ time: "", label: "" }); renderSched(); });
+
+  // ---- question rows ----
+  function renderQs() {
+    const el = $("qList");
+    el.innerHTML = "";
+    questions.forEach((q, i) => {
+      const row = document.createElement("div");
+      row.className = "ed-list-row";
+      row.style.gridTemplateColumns = "1fr 1fr 34px";
+      row.innerHTML = `<input placeholder="Question (e.g. Meal choice)" value="${q.label.replace(/"/g, "&quot;")}">
+        <input placeholder="Options, comma-separated (empty = free text)" value="${(q.optionsRaw || "").replace(/"/g, "&quot;")}">
+        <button class="ed-x" type="button">✕</button>`;
+      const [l, o, x] = row.children;
+      l.addEventListener("input", () => { q.label = l.value; schedulePush(); });
+      o.addEventListener("input", () => { q.optionsRaw = o.value; schedulePush(); });
+      x.addEventListener("click", () => { questions.splice(i, 1); renderQs(); schedulePush(); });
+      el.appendChild(row);
+    });
+  }
+  $("qAdd").addEventListener("click", () => { questions.push({ label: "", optionsRaw: "" }); renderQs(); });
+
+  fields.forEach((f) => $("f_" + f).addEventListener("input", schedulePush));
+
+  // ---- publish ----
+  $("publishBtn").addEventListener("click", async () => {
+    const data = collect();
+    const status = $("publishStatus");
+    if (!data.title) { status.textContent = "Give your invitation a title first."; return; }
+    $("publishBtn").disabled = true;
+    status.textContent = editing ? "Saving changes…" : "Publishing…";
+    try {
+      if (editing) {
+        await FiraAPI.updateInvite(editing.id, data, editing.admin_key);
+        status.textContent = "Saved! Guests now see the updated invitation.";
+        FiraVault.save({ id: editing.id, admin_key: editing.admin_key, title: data.title, template: data.template, date: data.date });
+      } else {
+        const res = await FiraAPI.createInvite(data);
+        editing = { id: res.id, admin_key: res.admin_key };
+        FiraVault.save({ id: res.id, admin_key: res.admin_key, title: data.title, template: data.template, date: data.date });
+        const base = location.href.replace(/create\.html.*$/, "");
+        const share = base + "i.html?id=" + res.id;
+        const manage = base + "manage.html?id=" + res.id + "&key=" + res.admin_key;
+        $("shareUrl").value = share;
+        $("manageUrl").value = manage;
+        $("viewLive").href = share;
+        $("goDash").onclick = () => (location.href = manage);
+        $("shareModal").hidden = false;
+        $("edHeading").textContent = "Editing: " + data.title;
+        $("publishBtn").textContent = "Save changes";
+        status.textContent = "";
+      }
+    } catch (err) {
+      status.textContent = "Failed: " + (err.message || "try again");
+    }
+    $("publishBtn").disabled = false;
+  });
+
+  const copy = (id) => {
+    const el = $(id);
+    el.select(); el.setSelectionRange(0, 999);
+    navigator.clipboard ? navigator.clipboard.writeText(el.value) : document.execCommand("copy");
+  };
+  $("copyShare").addEventListener("click", () => copy("shareUrl"));
+  $("copyManage").addEventListener("click", () => copy("manageUrl"));
+  $("shareModal").addEventListener("click", (e) => { if (e.target === $("shareModal")) $("shareModal").hidden = true; });
+
+  // ---- boot ----
+  initFrame();
+  if (editId) {
+    const saved = FiraVault.get(editId);
+    const key = new URLSearchParams(location.search).get("key") || (saved && saved.admin_key);
+    if (key) {
+      editing = { id: editId, admin_key: key };
+      $("edHeading").textContent = "Loading…";
+      $("publishBtn").textContent = "Save changes";
+      FiraAPI.getInvite(editId).then((res) => {
+        fill(res.data);
+        $("edHeading").textContent = "Editing: " + (res.data.title || editId);
+        push(false);
+      }).catch(() => { $("edHeading").textContent = "Couldn't load that invitation"; });
+    } else {
+      $("edHeading").textContent = "Missing host key for editing";
+    }
+  } else {
+    fill(JSON.parse(JSON.stringify(FIRA_SAMPLES.botanical)));
+  }
+})();
+</script>
+</body>
+</html>

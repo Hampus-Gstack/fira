@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>You're invited ✦ Fira</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23C25A3A'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Georgia' font-size='34' fill='%23FAF6EF'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/invite.css">
+<style>
+  body { margin: 0; }
+  .load-state {
+    min-height: 100vh; display: grid; place-items: center; font-family: Georgia, serif;
+    background: #FAF6EF; color: #1E2A23; text-align: center; padding: 20px;
+  }
+  .load-state a { color: #C25A3A; }
+</style>
+</head>
+<body>
+<div id="mount"><div class="load-state"><p>Opening your invitation…</p></div></div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/templates.js"></script>
+<script src="js/invite-core.js"></script>
+<script>
+(async function () {
+  const mount = document.getElementById("mount");
+  const params = new URLSearchParams(location.search);
+  const demo = params.get("demo");
+  const embed = params.get("embed") === "1";
+  const id = params.get("id") || (location.hash ? location.hash.slice(1) : "");
+
+  function fail(msg) {
+    mount.innerHTML = `<div class="load-state"><div>
+      <p style="font-size:22px">${msg}</p>
+      <p><a href="index.html">Create your own invitation with Fira →</a></p></div></div>`;
+  }
+
+  try {
+    if (demo && FIRA_SAMPLES[demo]) {
+      const data = JSON.parse(JSON.stringify(FIRA_SAMPLES[demo]));
+      document.title = data.title + " ✦ Fira";
+      FiraInvite.render(data, mount, { skipEnvelope: embed, noRsvp: false, inviteId: null });
+      return;
+    }
+    if (!id) return fail("This invitation link is incomplete.");
+    const res = await FiraAPI.getInvite(id);
+    const data = res.data;
+    data._id = id;
+    document.title = (data.title || "You're invited") + " ✦ Fira";
+    FiraInvite.render(data, mount, { inviteId: id });
+  } catch (err) {
+    fail(err.status === 404 ? "This invitation doesn't exist (or was removed)." : "Couldn't load the invitation. Check your connection and refresh.");
+  }
+})();
+</script>
+</body>
+</html>
