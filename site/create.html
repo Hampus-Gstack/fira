@@ -9,14 +9,25 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/site.css">
+<style>
+  .ed-list-row select { padding: 9px 8px; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-family: var(--body); }
+  .ed-list-row textarea { padding: 9px 11px; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; font-family: var(--body); resize: vertical; }
+  .ed-photo-row { display: grid; grid-template-columns: 56px 1fr 34px; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .ed-photo-row .thumb { width: 56px; height: 56px; border-radius: 8px; background: var(--paper-2) center/cover; border: 1px dashed var(--line); display: grid; place-items: center; font-size: 11px; color: var(--ink-soft); cursor: pointer; overflow: hidden; }
+  .ed-check { display: flex; align-items: center; gap: 10px; font-size: 14px; margin: 6px 0 14px; }
+  .ed-hint { font-size: 12px; color: var(--ink-soft); margin: -6px 0 12px; }
+  details.ed-block { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 4px; }
+  details.ed-block summary { cursor: pointer; font-family: var(--display); font-size: 19px; font-weight: 600; padding: 14px 0 10px; list-style: none; display: flex; justify-content: space-between; }
+  details.ed-block summary::after { content: "+"; color: var(--seal); font-size: 22px; }
+  details.ed-block[open] summary::after { content: "–"; }
+  details.ed-block summary small { font-weight: 400; font-size: 12px; color: var(--ink-soft); font-family: var(--body); margin-left: 8px; }
+</style>
 </head>
 <body>
 
 <nav class="nav">
   <a class="nav-logo" href="index.html"><span class="seal-dot">F</span>Fira</a>
-  <div class="nav-links">
-    <a href="manage.html">My invitations</a>
-  </div>
+  <div class="nav-links"><a href="manage.html">My invitations</a></div>
 </nav>
 
 <div class="editor-shell">
@@ -31,44 +42,105 @@
 
     <div class="ed-section">
       <h2>The essentials</h2>
-      <div class="ed-field"><label>Occasion line</label><input id="f_eventType" placeholder="Wedding · Birthday party · …"></div>
-      <div class="ed-field"><label>Main title (names / headline)</label><input id="f_title" placeholder="Alma & Theo"></div>
+      <div class="ed-field"><label>Occasion line</label><input id="f_eventType" placeholder="Wedding Day · Birthday party · …"></div>
+      <div class="ed-field"><label>Main title (names / headline)</label><input id="f_title" placeholder="Sofia & Marcus"></div>
       <div class="ed-field"><label>Subtitle</label><input id="f_subtitle" placeholder="are getting married"></div>
       <div class="ed-row">
         <div class="ed-field"><label>Date</label><input id="f_date" type="date"></div>
         <div class="ed-field"><label>Time</label><input id="f_time" type="time"></div>
       </div>
-      <div class="ed-field"><label>Venue</label><input id="f_venue" placeholder="Rosendal Orangery"></div>
-      <div class="ed-field"><label>Address</label><input id="f_address" placeholder="Rosendalsvägen 38, Stockholm"></div>
+      <div class="ed-field"><label>Venue</label><input id="f_venue" placeholder="Château de Valmont"></div>
+      <div class="ed-field"><label>Address</label><input id="f_address" placeholder="12 Chemin des Vignes, Arles"></div>
       <div class="ed-field"><label>Google Maps link (optional)</label><input id="f_mapUrl" type="url" placeholder="https://maps.google.com/…"></div>
-      <div class="ed-field"><label>"Our song" link (Spotify / YouTube, optional)</label><input id="f_songUrl" type="url" placeholder="https://open.spotify.com/…"></div>
-      <div class="ed-field">
-        <label>Photo (shown in a themed frame)</label>
-        <div id="photoCtl" style="display:flex;gap:10px;align-items:center">
-          <button class="ed-add" id="photoPick" type="button" style="flex:1">+ Add a photo</button>
-          <input id="photoFile" type="file" accept="image/*" hidden>
-        </div>
-        <p id="photoStatus" style="font-size:12px;color:var(--ink-soft);margin:6px 0 0"></p>
+      <div class="ed-field"><label>"Our song" link (optional)</label><input id="f_songUrl" type="url" placeholder="https://open.spotify.com/…"></div>
+      <div class="ed-field"><label>Hosted by</label><input id="f_hosts" placeholder="Sofia and Marcus"></div>
+      <div class="ed-row">
+        <div class="ed-field"><label>Seal monogram</label><input id="f_sealText" placeholder="auto (S·M)" maxlength="3"></div>
+        <div class="ed-field"><label>Envelope line</label><input id="f_envelopeTeaser" placeholder="With love"></div>
       </div>
-      <div class="ed-field"><label>Personal message</label><textarea id="f_message" rows="4" placeholder="A few warm lines to your guests…"></textarea></div>
-      <div class="ed-field"><label>Hosted by</label><input id="f_hosts" placeholder="Alma & Theo"></div>
-      <div class="ed-field"><label>Envelope teaser (shown on the sealed envelope)</label><input id="f_envelopeTeaser" placeholder="You are warmly invited"></div>
+      <div class="ed-field">
+        <label>Main photo</label>
+        <div class="ed-photo-row" style="grid-template-columns:56px 1fr"><div class="thumb" id="ph_main">+ add</div><span class="ed-hint" style="margin:0" id="ph_main_hint">Shown in a themed frame in the story.</span></div>
+      </div>
     </div>
 
-    <div class="ed-section">
-      <h2>Schedule <span style="font-weight:400;font-size:13px;color:var(--ink-soft)">(optional)</span></h2>
+    <details class="ed-block" open>
+      <summary>Message <small>a note to your guests</small></summary>
+      <div class="ed-field"><label>Heading (optional)</label><input id="f_messageTitle" placeholder="Dear Friends and Family,"></div>
+      <div class="ed-field"><label>Message</label><textarea id="f_message" rows="4" placeholder="A few warm lines…"></textarea></div>
+    </details>
+
+    <details class="ed-block" open>
+      <summary>Schedule <small>time · icon · what · note</small></summary>
       <div id="schedList"></div>
       <button class="ed-add" id="schedAdd" type="button">+ Add a moment</button>
-    </div>
+    </details>
 
-    <div class="ed-section">
-      <h2>RSVP</h2>
-      <div class="ed-field"><label>Reply-by date (optional)</label><input id="f_rsvpDeadline" type="date"></div>
-      <label style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft)">Extra questions for guests</label>
+    <details class="ed-block">
+      <summary>Dress code <small>text · palette · photos</small></summary>
+      <div class="ed-field"><label>Heading (optional)</label><input id="f_dcTitle" placeholder="Dress Code"></div>
+      <div class="ed-field"><label>Text</label><textarea id="f_dcText" rows="3" placeholder="We kindly invite you to dress in elegant attire…"></textarea></div>
+      <div class="ed-field"><label>Colour palette</label><input id="f_dcPalette" placeholder="#7A9E7E Sage, #4A1A24 Burgundy, #F5EFE6 Ivory"></div>
+      <p class="ed-hint">Comma-separated. Each entry: a colour, then an optional label.</p>
+      <label style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft)">Attire photos</label>
+      <div id="dcImgList" style="margin-top:8px"></div>
+      <button class="ed-add" id="dcImgAdd" type="button">+ Add a photo with caption</button>
+    </details>
+
+    <details class="ed-block">
+      <summary>Gifts <small>text · links · bank details</small></summary>
+      <div class="ed-field"><label>Text</label><textarea id="f_giftText" rows="3" placeholder="Your presence is your gift, but…"></textarea></div>
+      <label style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft)">Links (wishlist, registry)</label>
+      <div id="giftLinkList" style="margin-top:8px"></div>
+      <button class="ed-add" id="giftLinkAdd" type="button">+ Add a link</button>
+      <div class="ed-field" style="margin-top:12px"><label>Direct contribution details (shown under "prefer to contribute directly?")</label><textarea id="f_giftDetails" rows="2" placeholder="IBAN …"></textarea></div>
+    </details>
+
+    <details class="ed-block">
+      <summary>Menu <small>course · dish · description</small></summary>
+      <div id="menuList"></div>
+      <button class="ed-add" id="menuAdd" type="button">+ Add a course</button>
+    </details>
+
+    <details class="ed-block">
+      <summary>Accommodation <small>name · note · price · link</small></summary>
+      <div id="accList"></div>
+      <button class="ed-add" id="accAdd" type="button">+ Add a place to stay</button>
+    </details>
+
+    <details class="ed-block">
+      <summary>FAQ <small>question · answer</small></summary>
+      <div id="faqList"></div>
+      <button class="ed-add" id="faqAdd" type="button">+ Add a question</button>
+    </details>
+
+    <details class="ed-block">
+      <summary>Contact & details</summary>
+      <div class="ed-field"><label>Text</label><input id="f_contactText" placeholder="For additional information, please contact…"></div>
+      <div class="ed-row">
+        <div class="ed-field"><label>Name</label><input id="f_contactName" placeholder="Amelie"></div>
+        <div class="ed-field"><label>Phone</label><input id="f_contactPhone" placeholder="+33 6 …"></div>
+      </div>
+      <div class="ed-field"><label>Gift note (optional)</label><textarea id="f_contactGift" rows="2" placeholder="Your presence is the greatest gift…"></textarea></div>
+    </details>
+
+    <details class="ed-block" open>
+      <summary>RSVP</summary>
+      <div class="ed-row">
+        <div class="ed-field"><label>Reply-by date</label><input id="f_rsvpDeadline" type="date"></div>
+        <div class="ed-field"><label>&nbsp;</label><label class="ed-check"><input type="checkbox" id="f_collectEmail"> Ask for email</label></div>
+      </div>
+      <div class="ed-field"><label>Intro text</label><input id="f_rsvpIntro" placeholder="To help us prepare, kindly confirm your attendance."></div>
+      <div class="ed-field"><label>Closing line</label><input id="f_closingText" placeholder="Hope to see you there!"></div>
+      <label style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft)">Extra questions</label>
       <div id="qList" style="margin-top:8px"></div>
-      <button class="ed-add" id="qAdd" type="button">+ Add a question (e.g. meal choice)</button>
-      <p style="font-size:12px;color:var(--ink-soft);margin-top:8px">Tip: separate choice options with commas — leave options empty for a free-text answer.</p>
-    </div>
+      <button class="ed-add" id="qAdd" type="button">+ Add a question</button>
+      <p class="ed-hint" style="margin-top:8px">Options comma-separated. Type: text · single choice · multiple choice · radio.</p>
+      <div class="ed-field">
+        <label>Second photo (shown after the RSVP form)</label>
+        <div class="ed-photo-row" style="grid-template-columns:56px 1fr"><div class="thumb" id="ph_second">+ add</div><span class="ed-hint" style="margin:0">Optional — a photo of you two.</span></div>
+      </div>
+    </details>
 
     <div class="publish-bar">
       <button class="btn btn-primary btn-big" id="publishBtn" type="button">Publish invitation</button>
@@ -88,14 +160,8 @@
   <div class="share-card">
     <h2>It's live! 🎉</h2>
     <p class="share-note">Send this link to your guests — it opens straight into the sealed envelope.</p>
-    <div class="share-link">
-      <input id="shareUrl" readonly>
-      <button class="btn btn-primary" id="copyShare" type="button">Copy</button>
-    </div>
-    <div class="share-link">
-      <input id="manageUrl" readonly>
-      <button class="btn btn-ghost" id="copyManage" type="button">Copy</button>
-    </div>
+    <div class="share-link"><input id="shareUrl" readonly><button class="btn btn-primary" id="copyShare" type="button">Copy</button></div>
+    <div class="share-link"><input id="manageUrl" readonly><button class="btn btn-ghost" id="copyManage" type="button">Copy</button></div>
     <p class="share-note">↑ Your <b>private host link</b> — RSVPs, guest list, editing.</p>
     <div class="share-warn">⚠️ Keep the host link to yourself. Anyone with it can see your guest list and edit the invitation. We've also saved it under <a href="manage.html">My invitations</a> on this device.</div>
     <p style="margin-top:22px"><a class="btn btn-ghost" id="viewLive" href="#" target="_blank">Open live invitation</a>
@@ -103,52 +169,90 @@
   </div>
 </div>
 
+<input id="photoFile" type="file" accept="image/*" hidden>
+
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/templates.js"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
-  const fields = ["eventType","title","subtitle","date","time","venue","address","mapUrl","songUrl","message","hosts","envelopeTeaser","rsvpDeadline"];
-  let currentTpl = "botanical";
-  let schedule = [];
-  let questions = [];
-  let photoId = null;
-  let editing = null; // {id, admin_key} when editing an existing invite
-
-  // ---- edit mode: ?edit=<id> pulls admin key from vault ----
+  const fields = ["eventType","title","subtitle","date","time","venue","address","mapUrl","songUrl","hosts","sealText","envelopeTeaser",
+                  "messageTitle","message","dcTitle","dcText","dcPalette","giftText","giftDetails",
+                  "contactText","contactName","contactPhone","contactGift","rsvpDeadline","rsvpIntro","closingText"];
+  let currentTpl = "chateau";
+  let base = {};          // pass-through fields the editor doesn't manage (demo image urls etc.)
+  let photoId = null, photo2Id = null;
+  const st = { schedule: [], dcImages: [], giftLinks: [], menu: [], acc: [], faq: [], questions: [] };
+  let editing = null;
   const editId = new URLSearchParams(location.search).get("edit");
 
+  // ---------- collect / fill ----------
+  function parsePalette(s) {
+    return (s || "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
+      const m = x.match(/^(#[0-9a-f]{3,8}|[a-z]+)\s*(.*)$/i);
+      return m ? { color: m[1], label: m[2] || "" } : { color: x };
+    });
+  }
+  const paletteStr = (p) => (p || []).map((x) => [x.color, x.label].filter(Boolean).join(" ")).join(", ");
+  const val = (id) => $("f_" + id).value.trim();
+  const clean = (arr, key) => arr.filter((x) => (x[key] || "").trim());
+
   function collect() {
-    const data = { template: currentTpl };
-    fields.forEach((f) => { data[f] = $("f_" + f).value.trim(); });
-    if (photoId) data.photoId = photoId;
-    data.schedule = schedule.filter((s) => s.label);
-    data.questions = questions
-      .filter((q) => q.label)
-      .map((q) => {
-        const opts = (q.optionsRaw || "").split(",").map((s) => s.trim()).filter(Boolean);
-        return opts.length ? { type: "choice", label: q.label, options: opts } : { type: "text", label: q.label };
-      });
-    return data;
+    const d = Object.assign({}, base, { template: currentTpl });
+    ["eventType","title","subtitle","date","time","venue","address","mapUrl","songUrl","hosts","sealText","envelopeTeaser",
+     "messageTitle","message","rsvpDeadline","rsvpIntro","closingText"].forEach((f) => { d[f] = val(f); });
+    if (photoId) d.photoId = photoId; else delete d.photoId;
+    if (photo2Id) d.photo2Id = photo2Id; else delete d.photo2Id;
+    d.collectEmail = $("f_collectEmail").checked;
+    d.schedule = clean(st.schedule, "label").map((s) => ({ time: s.time, icon: s.icon, label: s.label, note: s.note }));
+    const dcImgs = st.dcImages.filter((i) => i.photoId || i.url).map((i) => ({ photoId: i.photoId, url: i.url, caption: i.caption }));
+    const dc = { title: val("dcTitle"), text: val("dcText"), palette: parsePalette(val("dcPalette")), images: dcImgs };
+    d.dressCode = (dc.text || dc.palette.length || dcImgs.length) ? dc : undefined;
+    const gl = clean(st.giftLinks, "url");
+    d.gifts = (val("giftText") || gl.length) ? { text: val("giftText"), links: gl, details: val("giftDetails") } : undefined;
+    d.menu = clean(st.menu, "name");
+    d.accommodation = clean(st.acc, "name").map((a) => Object.assign({}, a));
+    d.faq = clean(st.faq, "q");
+    const c = { text: val("contactText"), name: val("contactName"), phone: val("contactPhone"), giftText: val("contactGift") };
+    d.contact = (c.text || c.name || c.phone || c.giftText) ? c : undefined;
+    d.questions = clean(st.questions, "label").map((q) => {
+      const opts = (q.optionsRaw || "").split(",").map((s) => s.trim()).filter(Boolean);
+      const type = q.type === "text" || !opts.length ? "text" : q.type;
+      return Object.assign({ type, label: q.label }, type !== "text" ? { options: opts } : {}, q.placeholder ? { placeholder: q.placeholder } : {});
+    });
+    Object.keys(d).forEach((k) => d[k] === undefined && delete d[k]);
+    return d;
   }
 
   function fill(data) {
-    currentTpl = data.template || "botanical";
-    fields.forEach((f) => { $("f_" + f).value = data[f] || ""; });
-    photoId = data.photoId || null;
-    updatePhotoUi();
-    schedule = (data.schedule || []).map((s) => ({ time: s.time || "", label: s.label || "" }));
-    questions = (data.questions || []).map((q) => ({
-      label: q.label || "", optionsRaw: (q.options || []).join(", "),
-    }));
-    renderTplPicker(); renderSched(); renderQs();
+    base = JSON.parse(JSON.stringify(data));
+    currentTpl = data.template || "chateau";
+    fields.forEach((f) => { $("f_" + f).value = ""; });
+    ["eventType","title","subtitle","date","time","venue","address","mapUrl","songUrl","hosts","sealText","envelopeTeaser",
+     "messageTitle","message","rsvpDeadline","rsvpIntro","closingText"].forEach((f) => { $("f_" + f).value = data[f] || ""; });
+    photoId = data.photoId || null; photo2Id = data.photo2Id || null;
+    $("f_collectEmail").checked = !!data.collectEmail;
+    st.schedule = (data.schedule || []).map((s) => ({ time: s.time || "", icon: s.icon || "", label: s.label || "", note: s.note || "" }));
+    const dc = data.dressCode || {};
+    $("f_dcTitle").value = dc.title || ""; $("f_dcText").value = dc.text || ""; $("f_dcPalette").value = paletteStr(dc.palette);
+    st.dcImages = (dc.images || []).map((i) => ({ photoId: i.photoId, url: i.url, caption: i.caption || "" }));
+    const g = data.gifts || {};
+    $("f_giftText").value = g.text || ""; $("f_giftDetails").value = g.details || "";
+    st.giftLinks = (g.links || []).map((l) => ({ label: l.label || "", url: l.url || "" }));
+    st.menu = (data.menu || []).map((m) => ({ course: m.course || "", name: m.name || "", description: m.description || "" }));
+    st.acc = (data.accommodation || []).map((a) => ({ name: a.name || "", note: a.note || "", price: a.price || "", url: a.url || "", imageUrl: a.imageUrl }));
+    st.faq = (data.faq || []).map((f) => ({ q: f.q || "", a: f.a || "" }));
+    const c = data.contact || {};
+    $("f_contactText").value = c.text || ""; $("f_contactName").value = c.name || ""; $("f_contactPhone").value = c.phone || ""; $("f_contactGift").value = c.giftText || "";
+    st.questions = (data.questions || []).map((q) => ({ label: q.label || "", optionsRaw: (q.options || []).join(", "), type: q.type || "text", placeholder: q.placeholder || "" }));
+    renderTplPicker(); renderAll(); updatePhotoThumbs();
   }
 
-  // ---- live preview (postMessage into i.html-less inline doc) ----
+  // ---------- live preview ----------
   const frame = $("previewFrame");
-  let frameReady = false;
-  function initFrame(replay) {
+  let frameReady = false, pendingEnvelope = false, pushTimer = null;
+  function initFrame() {
     frameReady = false;
     const doc = frame.contentDocument;
     doc.open();
@@ -158,129 +262,151 @@
       <script src="js/templates.js"><\/script><script src="js/invite-core.js"><\/script>
       <script>window.addEventListener("message",function(e){
         if(!e.data||e.data.type!=="fira-preview")return;
-        FiraInvite.render(e.data.data, document.getElementById("m"), {skipEnvelope:!e.data.envelope, noRsvp:false, inviteId:null});
+        FiraInvite.render(e.data.data, document.getElementById("m"), {skipEnvelope:!e.data.envelope, noRsvp:false, inviteId:null, noFullscreen:true});
       });parent.postMessage({type:"fira-ready"},"*");<\/script></body></html>`);
     doc.close();
   }
   window.addEventListener("message", (e) => {
-    if (e.data && e.data.type === "fira-ready") {
-      frameReady = true;
-      push(pendingEnvelope);
-      pendingEnvelope = false;
-    }
+    if (e.data && e.data.type === "fira-ready") { frameReady = true; push(pendingEnvelope); pendingEnvelope = false; }
   });
-  let pendingEnvelope = false;
-  let pushTimer = null;
   function push(envelope) {
     if (!frameReady) { pendingEnvelope = envelope; return; }
     frame.contentWindow.postMessage({ type: "fira-preview", data: collect(), envelope: !!envelope }, "*");
   }
   function schedulePush() { clearTimeout(pushTimer); pushTimer = setTimeout(() => push(false), 250); }
-
   $("replayBtn").addEventListener("click", () => { initFrame(); pendingEnvelope = true; });
+  fields.forEach((f) => $("f_" + f).addEventListener("input", schedulePush));
+  $("f_collectEmail").addEventListener("change", schedulePush);
 
-  // ---- theme picker ----
+  // ---------- theme picker ----------
   function renderTplPicker() {
-    const el = $("tplPicker");
-    el.innerHTML = "";
+    const el = $("tplPicker"); el.innerHTML = "";
     Object.values(FIRA_TEMPLATES).forEach((t) => {
       const b = document.createElement("button");
-      b.type = "button";
-      b.className = "tpl-chip" + (t.id === currentTpl ? " on" : "");
-      b.innerHTML = `<span class="tc-sw">${t.swatch.map((c) => `<i style="background:${c}"></i>`).join("")}</span>
-        <span class="tc-name">${t.name}</span><span class="tc-occ">${t.occasion}</span>`;
+      b.type = "button"; b.className = "tpl-chip" + (t.id === currentTpl ? " on" : "");
+      b.innerHTML = `<span class="tc-sw">${t.swatch.map((c) => `<i style="background:${c}"></i>`).join("")}</span><span class="tc-name">${t.name}</span><span class="tc-occ">${t.occasion}</span>`;
       b.addEventListener("click", () => {
         const wasEmpty = !$("f_title").value.trim();
         currentTpl = t.id;
         if (wasEmpty && !editing) fill(JSON.parse(JSON.stringify(FIRA_SAMPLES[t.id])));
-        renderTplPicker();
-        push(false);
+        renderTplPicker(); push(false);
       });
       el.appendChild(b);
     });
   }
 
-  // ---- schedule rows ----
-  function renderSched() {
-    const el = $("schedList");
-    el.innerHTML = "";
-    schedule.forEach((s, i) => {
-      const row = document.createElement("div");
-      row.className = "ed-list-row";
-      row.innerHTML = `<input type="time" value="${s.time}"><input placeholder="What happens" value="${s.label.replace(/"/g, "&quot;")}"><button class="ed-x" type="button">✕</button>`;
-      const [t, l, x] = row.children;
-      t.addEventListener("input", () => { s.time = t.value; schedulePush(); });
-      l.addEventListener("input", () => { s.label = l.value; schedulePush(); });
-      x.addEventListener("click", () => { schedule.splice(i, 1); renderSched(); schedulePush(); });
-      el.appendChild(row);
-    });
+  // ---------- generic list editor ----------
+  function listEditor(listId, addId, items, fields, blank) {
+    const el = $(listId);
+    function render() {
+      el.innerHTML = "";
+      items().forEach((it, i) => {
+        const row = document.createElement("div");
+        row.className = "ed-list-row";
+        row.style.gridTemplateColumns = fields.map((f) => f.w || "1fr").join(" ") + " 34px";
+        fields.forEach((f) => {
+          let inp;
+          if (f.type === "select") {
+            inp = document.createElement("select");
+            f.options.forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; inp.appendChild(o); });
+            inp.value = it[f.key] || f.options[0][0];
+            inp.addEventListener("change", () => { it[f.key] = inp.value; schedulePush(); });
+          } else {
+            inp = document.createElement(f.type === "textarea" ? "textarea" : "input");
+            if (f.type !== "textarea") inp.type = f.type || "text";
+            if (f.type === "textarea") inp.rows = 2;
+            inp.placeholder = f.placeholder || ""; inp.value = it[f.key] || "";
+            inp.addEventListener("input", () => { it[f.key] = inp.value; schedulePush(); });
+          }
+          row.appendChild(inp);
+        });
+        const x = document.createElement("button"); x.type = "button"; x.className = "ed-x"; x.textContent = "✕";
+        x.addEventListener("click", () => { items().splice(i, 1); render(); schedulePush(); });
+        row.appendChild(x);
+        el.appendChild(row);
+      });
+    }
+    $(addId).addEventListener("click", () => { items().push(blank()); render(); });
+    return render;
   }
-  $("schedAdd").addEventListener("click", () => { schedule.push({ time: "", label: "" }); renderSched(); });
+  const renderSched = listEditor("schedList", "schedAdd", () => st.schedule,
+    [{ key: "time", type: "time", w: "92px" }, { key: "icon", placeholder: "🥂", w: "44px" }, { key: "label", placeholder: "What happens" }, { key: "note", placeholder: "Note (optional)" }],
+    () => ({ time: "", icon: "", label: "", note: "" }));
+  const renderGiftLinks = listEditor("giftLinkList", "giftLinkAdd", () => st.giftLinks,
+    [{ key: "label", placeholder: "Label (e.g. Our wishlist)" }, { key: "url", type: "url", placeholder: "https://…" }],
+    () => ({ label: "", url: "" }));
+  const renderMenu = listEditor("menuList", "menuAdd", () => st.menu,
+    [{ key: "course", placeholder: "Starter", w: "90px" }, { key: "name", placeholder: "Dish" }, { key: "description", placeholder: "Description" }],
+    () => ({ course: "", name: "", description: "" }));
+  const renderAcc = listEditor("accList", "accAdd", () => st.acc,
+    [{ key: "name", placeholder: "Hotel name" }, { key: "note", placeholder: "Note" }, { key: "price", placeholder: "from €120", w: "90px" }, { key: "url", type: "url", placeholder: "Booking link" }],
+    () => ({ name: "", note: "", price: "", url: "" }));
+  const renderFaq = listEditor("faqList", "faqAdd", () => st.faq,
+    [{ key: "q", placeholder: "Question" }, { key: "a", type: "textarea", placeholder: "Answer" }],
+    () => ({ q: "", a: "" }));
+  const renderQs = listEditor("qList", "qAdd", () => st.questions,
+    [{ key: "label", placeholder: "Question" }, { key: "optionsRaw", placeholder: "Options, comma-separated" },
+     { key: "type", type: "select", w: "110px", options: [["text", "Text"], ["choice", "Single choice"], ["multi", "Multiple choice"], ["radio", "Radio"]] }],
+    () => ({ label: "", optionsRaw: "", type: "text" }));
 
-  // ---- question rows ----
-  function renderQs() {
-    const el = $("qList");
-    el.innerHTML = "";
-    questions.forEach((q, i) => {
-      const row = document.createElement("div");
-      row.className = "ed-list-row";
-      row.style.gridTemplateColumns = "1fr 1fr 34px";
-      row.innerHTML = `<input placeholder="Question (e.g. Meal choice)" value="${q.label.replace(/"/g, "&quot;")}">
-        <input placeholder="Options, comma-separated (empty = free text)" value="${(q.optionsRaw || "").replace(/"/g, "&quot;")}">
-        <button class="ed-x" type="button">✕</button>`;
-      const [l, o, x] = row.children;
-      l.addEventListener("input", () => { q.label = l.value; schedulePush(); });
-      o.addEventListener("input", () => { q.optionsRaw = o.value; schedulePush(); });
-      x.addEventListener("click", () => { questions.splice(i, 1); renderQs(); schedulePush(); });
-      el.appendChild(row);
-    });
+  // ---------- photos ----------
+  async function uploadPhoto(file) {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
+    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    const blob = await new Promise((ok) => cv.toBlob(ok, "image/jpeg", 0.86));
+    const fd = new FormData(); fd.append("file", blob, "photo.jpg");
+    const res = await fetch(FIRA_CONFIG.API_BASE + "/photos", { method: "POST", body: fd });
+    if (!res.ok) throw new Error((await res.json()).detail || "Upload failed");
+    return (await res.json()).id;
   }
-  $("qAdd").addEventListener("click", () => { questions.push({ label: "", optionsRaw: "" }); renderQs(); });
-
-  fields.forEach((f) => $("f_" + f).addEventListener("input", schedulePush));
-
-  // ---- photo: pick → downscale on canvas → upload → photoId ----
-  function updatePhotoUi() {
-    $("photoPick").textContent = photoId ? "✓ Photo added — click to replace" : "+ Add a photo";
-    $("photoStatus").innerHTML = photoId
-      ? 'Shown in a themed frame. <a href="#" id="photoRm">Remove</a>' : "";
-    const rm = $("photoStatus").querySelector("#photoRm");
-    if (rm) rm.addEventListener("click", (e) => {
-      e.preventDefault(); photoId = null; updatePhotoUi(); push(false);
-    });
-  }
-  $("photoPick").addEventListener("click", () => $("photoFile").click());
+  let photoTarget = null;
+  function pickPhoto(cb) { photoTarget = cb; $("photoFile").value = ""; $("photoFile").click(); }
   $("photoFile").addEventListener("change", async () => {
     const file = $("photoFile").files[0];
-    if (!file) return;
-    $("photoStatus").textContent = "Preparing photo…";
-    try {
-      const img = await new Promise((ok, no) => {
-        const i = new Image();
-        i.onload = () => ok(i); i.onerror = no;
-        i.src = URL.createObjectURL(file);
-      });
-      const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
-      const cv = document.createElement("canvas");
-      cv.width = Math.round(img.width * scale);
-      cv.height = Math.round(img.height * scale);
-      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-      const blob = await new Promise((ok) => cv.toBlob(ok, "image/jpeg", 0.86));
-      const fd = new FormData();
-      fd.append("file", blob, "photo.jpg");
-      $("photoStatus").textContent = "Uploading…";
-      const res = await fetch(FIRA_CONFIG.API_BASE + "/photos", { method: "POST", body: fd });
-      if (!res.ok) throw new Error((await res.json()).detail || "Upload failed");
-      photoId = (await res.json()).id;
-      updatePhotoUi();
-      push(false);
-    } catch (err) {
-      $("photoStatus").textContent = "Photo failed: " + (err.message || "try another image");
-    }
-    $("photoFile").value = "";
+    if (!file || !photoTarget) return;
+    try { photoTarget(await uploadPhoto(file)); } catch (err) { alert("Photo failed: " + (err.message || "try another image")); }
+    photoTarget = null;
   });
+  const thumbSrc = (id, url) => url || (id ? FIRA_CONFIG.API_BASE + "/photos/" + id : "");
+  function setThumb(el, id, url) {
+    const src = thumbSrc(id, url);
+    el.style.backgroundImage = src ? `url("${src}")` : "";
+    el.textContent = src ? "" : "+ add";
+    el.title = src ? "Click to replace · shift-click to remove" : "Add photo";
+  }
+  function updatePhotoThumbs() {
+    setThumb($("ph_main"), photoId, base.photoUrl);
+    setThumb($("ph_second"), photo2Id, base.photo2Url);
+  }
+  $("ph_main").addEventListener("click", (e) => {
+    if (e.shiftKey) { photoId = null; delete base.photoUrl; updatePhotoThumbs(); push(false); return; }
+    pickPhoto((id) => { photoId = id; delete base.photoUrl; updatePhotoThumbs(); push(false); });
+  });
+  $("ph_second").addEventListener("click", (e) => {
+    if (e.shiftKey) { photo2Id = null; delete base.photo2Url; updatePhotoThumbs(); push(false); return; }
+    pickPhoto((id) => { photo2Id = id; delete base.photo2Url; updatePhotoThumbs(); push(false); });
+  });
+  function renderDcImages() {
+    const el = $("dcImgList"); el.innerHTML = "";
+    st.dcImages.forEach((im, i) => {
+      const row = document.createElement("div"); row.className = "ed-photo-row";
+      const th = document.createElement("div"); th.className = "thumb"; setThumb(th, im.photoId, im.url);
+      th.addEventListener("click", () => pickPhoto((id) => { im.photoId = id; delete im.url; renderDcImages(); push(false); }));
+      const cap = document.createElement("input"); cap.placeholder = "Caption"; cap.value = im.caption || "";
+      cap.style.cssText = "padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;font-family:var(--body)";
+      cap.addEventListener("input", () => { im.caption = cap.value; schedulePush(); });
+      const x = document.createElement("button"); x.type = "button"; x.className = "ed-x"; x.textContent = "✕";
+      x.addEventListener("click", () => { st.dcImages.splice(i, 1); renderDcImages(); schedulePush(); });
+      row.append(th, cap, x); el.appendChild(row);
+    });
+  }
+  $("dcImgAdd").addEventListener("click", () => { st.dcImages.push({ caption: "" }); renderDcImages(); });
+  function renderAll() { renderSched(); renderGiftLinks(); renderMenu(); renderAcc(); renderFaq(); renderQs(); renderDcImages(); }
 
-  // ---- publish ----
+  // ---------- publish ----------
   $("publishBtn").addEventListener("click", async () => {
     const data = collect();
     const status = $("publishStatus");
@@ -296,52 +422,40 @@
         const res = await FiraAPI.createInvite(data);
         editing = { id: res.id, admin_key: res.admin_key };
         FiraVault.save({ id: res.id, admin_key: res.admin_key, title: data.title, template: data.template, date: data.date });
-        const base = location.href.replace(/create\.html.*$/, "");
-        const share = base + "i.html?id=" + res.id;
-        const manage = base + "manage.html?id=" + res.id + "&key=" + res.admin_key;
-        $("shareUrl").value = share;
-        $("manageUrl").value = manage;
-        $("viewLive").href = share;
+        const baseUrl = location.href.replace(/create\.html.*$/, "");
+        const share = baseUrl + "i.html?id=" + res.id;
+        const manage = baseUrl + "manage.html?id=" + res.id + "&key=" + res.admin_key;
+        $("shareUrl").value = share; $("manageUrl").value = manage; $("viewLive").href = share;
         $("goDash").onclick = () => (location.href = manage);
         $("shareModal").hidden = false;
         $("edHeading").textContent = "Editing: " + data.title;
         $("publishBtn").textContent = "Save changes";
         status.textContent = "";
       }
-    } catch (err) {
-      status.textContent = "Failed: " + (err.message || "try again");
-    }
+    } catch (err) { status.textContent = "Failed: " + (err.message || "try again"); }
     $("publishBtn").disabled = false;
   });
-
-  const copy = (id) => {
-    const el = $(id);
-    el.select(); el.setSelectionRange(0, 999);
-    navigator.clipboard ? navigator.clipboard.writeText(el.value) : document.execCommand("copy");
-  };
+  const copy = (id) => { const el = $(id); el.select(); el.setSelectionRange(0, 999); navigator.clipboard ? navigator.clipboard.writeText(el.value) : document.execCommand("copy"); };
   $("copyShare").addEventListener("click", () => copy("shareUrl"));
   $("copyManage").addEventListener("click", () => copy("manageUrl"));
   $("shareModal").addEventListener("click", (e) => { if (e.target === $("shareModal")) $("shareModal").hidden = true; });
 
-  // ---- boot ----
+  // ---------- boot ----------
   initFrame();
+  const params = new URLSearchParams(location.search);
   if (editId) {
     const saved = FiraVault.get(editId);
-    const key = new URLSearchParams(location.search).get("key") || (saved && saved.admin_key);
+    const key = params.get("key") || (saved && saved.admin_key);
     if (key) {
       editing = { id: editId, admin_key: key };
-      $("edHeading").textContent = "Loading…";
-      $("publishBtn").textContent = "Save changes";
+      $("edHeading").textContent = "Loading…"; $("publishBtn").textContent = "Save changes";
       FiraAPI.getInvite(editId).then((res) => {
-        fill(res.data);
-        $("edHeading").textContent = "Editing: " + (res.data.title || editId);
-        push(false);
+        fill(res.data); $("edHeading").textContent = "Editing: " + (res.data.title || editId); push(false);
       }).catch(() => { $("edHeading").textContent = "Couldn't load that invitation"; });
-    } else {
-      $("edHeading").textContent = "Missing host key for editing";
-    }
+    } else { $("edHeading").textContent = "Missing host key for editing"; }
   } else {
-    fill(JSON.parse(JSON.stringify(FIRA_SAMPLES.botanical)));
+    const t = params.get("template");
+    fill(JSON.parse(JSON.stringify(FIRA_SAMPLES[t] || FIRA_SAMPLES.chateau)));
   }
 })();
 </script>

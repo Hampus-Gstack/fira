@@ -31,12 +31,12 @@
     <p class="hero-sub">Skip the paper and the boring e-vite. Fira invitations arrive as a sealed envelope, open into a living animated page, and collect your RSVPs while you sleep.</p>
     <div class="hero-ctas">
       <a class="btn btn-primary btn-big" href="create.html">Create your invitation</a>
-      <a class="btn btn-ghost" href="i.html?demo=botanical">See a live demo</a>
+      <a class="btn btn-ghost" href="i.html?demo=chateau">See a live demo</a>
     </div>
     <p class="hero-note">Free while in beta · No app for your guests · Works on any phone</p>
   </div>
   <div class="hero-demo">
-    <iframe src="i.html?demo=confetti&embed=1" title="Live invitation demo" loading="lazy"></iframe>
+    <iframe src="i.html?demo=chateau&embed=1" title="Live invitation demo" loading="lazy"></iframe>
   </div>
 </header>
 
@@ -48,7 +48,7 @@
   <div class="steps">
     <div class="step"><span class="step-num">1</span>
       <h3>Pick a theme</h3>
-      <p>Six hand-crafted animated themes — from candle-lit noir galas to confetti-storm birthdays. Every one opens with our signature wax-seal envelope.</p>
+      <p>Eight themes — a burgundy château romance, a Tuscan watercolor, candle-lit noir, confetti birthdays and more. Each opens with its own wax-sealed envelope film.</p>
     </div>
     <div class="step"><span class="step-num">2</span>
       <h3>Make it yours</h3>
@@ -64,7 +64,7 @@
 <section class="section" id="templates">
   <div class="section-head">
     <h2>Themes with a pulse</h2>
-    <p>Tap any theme to open a live sample invitation — seal, animations and all.</p>
+    <p>Tap any theme to open a live sample invitation — seal, film, story and RSVP.</p>
   </div>
   <div class="tpl-grid" id="tplGrid"></div>
 </section>
@@ -94,7 +94,7 @@
       <div class="p-amount">€0</div>
       <p class="p-note">For casual parties and testing the waters.</p>
       <ul>
-        <li>All 6 animated themes</li>
+        <li>All animated themes</li>
         <li>Up to 30 RSVPs</li>
         <li>Countdown & calendar button</li>
         <li>"Made with Fira" badge</li>
@@ -155,9 +155,10 @@
     const a = document.createElement("a");
     a.className = "tpl-card";
     a.href = "i.html?demo=" + t.id;
+    const poster = t.opening && t.opening.hero;
     a.innerHTML = `
-      <div class="tpl-thumb" style="background:${t.swatch[0]};color:${t.swatch[1]}">
-        <span class="tpl-title" style="font-family:Fraunces,serif">${s.title}</span>
+      <div class="tpl-thumb" style="background:${poster ? `url('${poster}') center 30%/cover` : t.swatch[0]};color:${poster ? "#fff" : t.swatch[1]}">
+        <span class="tpl-title" style="font-family:Fraunces,serif;${poster ? "text-shadow:0 2px 14px rgba(0,0,0,0.55)" : ""}">${s.title}</span>
       </div>
       <div class="tpl-meta">
         <div><b>${t.name}</b><br><span>${t.occasion}</span></div>
