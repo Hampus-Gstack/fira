@@ -352,7 +352,7 @@
 .theme-chateau .ch:not(.ch-hero) { min-height: 0; place-items: start center; padding-top: calc(34px + 7vh); padding-bottom: 9vh; }
 .theme-chateau .ch-message::before, .theme-chateau .ch-rsvp::before, .theme-chateau .ch-contact::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background-size: 100% auto; background-repeat: no-repeat; }
 .theme-chateau .ch-message::before, .theme-chateau .ch-rsvp::before { background-image: url("https://fira.cursuscapital.co/media/band-chateau-burgundy.jpg"); background-position: top center; -webkit-mask-image: linear-gradient(#000 55%, transparent 100%); mask-image: linear-gradient(#000 55%, transparent 100%); }
-.theme-chateau .ch-contact::before { background-image: url("https://fira.cursuscapital.co/media/band-chateau-white.jpg"); background-position: bottom center; -webkit-mask-image: linear-gradient(transparent 0%, transparent 30%, #000 60%); mask-image: linear-gradient(transparent 0%, transparent 30%, #000 60%); }
+.theme-chateau .ch-contact::before { background-image: url("https://fira.cursuscapital.co/media/band-chateau-white.jpg"); background-position: bottom center; -webkit-mask-image: linear-gradient(transparent 0, transparent calc(100% - 300px), #000 calc(100% - 190px)); mask-image: linear-gradient(transparent 0, transparent calc(100% - 300px), #000 calc(100% - 190px)); }
 .theme-chateau .ch-message, .theme-chateau .ch-rsvp { padding-top: calc(34px + min(66vw, 300px)); }
 .theme-chateau .ch-contact { padding-bottom: min(70vw, 320px); }
 .theme-chateau .venue-art { max-width: 380px; }
