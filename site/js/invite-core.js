@@ -428,17 +428,48 @@
       </div>`;
     mount.appendChild(env);
 
+    // Optional generated opening film: preloads while the seal idles.
+    let film = null;
+    if (theme.openingVideo && !opts.noFilm) {
+      film = document.createElement("video");
+      film.className = "env3-film";
+      film.muted = true; film.playsInline = true; film.preload = "auto";
+      film.setAttribute("muted", ""); film.setAttribute("playsinline", "");
+      film.src = theme.openingVideo;
+      env.appendChild(film);
+    }
+    const filmReady = () => film && film.readyState >= 3 && !film.error;
+
     let opened = false;
+    const cssSequence = () => {
+      setTimeout(() => env.classList.add("cracked"), 260);     // halves break away
+      setTimeout(() => env.classList.add("unfolding"), 760);   // flap opens in 3D
+      setTimeout(() => { env.classList.add("lifting"); onOpen(); }, 1500); // letter takes over
+      setTimeout(() => env.remove(), 2600);
+    };
+    const filmSequence = () => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        env.classList.add("lifting"); onOpen();
+        setTimeout(() => env.remove(), 1100);
+      };
+      setTimeout(() => {
+        env.classList.add("filming");
+        film.play().catch(() => { env.classList.remove("filming"); cssSequence(); });
+        film.addEventListener("ended", finish);
+        film.addEventListener("error", finish);
+        setTimeout(finish, 9000); // hard stop
+      }, 220);
+    };
     const open = () => {
       if (opened) return;
       opened = true;
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
       if (!opts.noFullscreen) tryFullscreen();
       env.classList.add("sealing");                            // press down
-      setTimeout(() => env.classList.add("cracked"), 260);     // halves break away
-      setTimeout(() => env.classList.add("unfolding"), 760);   // flap opens in 3D
-      setTimeout(() => { env.classList.add("lifting"); onOpen(); }, 1500); // letter takes over
-      setTimeout(() => env.remove(), 2600);
+      if (filmReady()) filmSequence(); else cssSequence();
     };
     env.querySelector(".env3-seal").addEventListener("click", (e) => { e.stopPropagation(); open(); });
     env.addEventListener("click", open);

@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(__file__).parent / "data" / "fira.db"
@@ -29,6 +30,9 @@ ALLOWED_ORIGINS = [
 ]
 
 app = FastAPI(title="Fira API", docs_url=None, redoc_url=None)
+MEDIA_DIR = Path(__file__).parent / "media"
+MEDIA_DIR.mkdir(exist_ok=True)
+app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,

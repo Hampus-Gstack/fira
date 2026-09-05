@@ -44,6 +44,7 @@
       fonts: G + "family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Karla:wght@400;600&display=swap",
       ornament: "❦",
       envTint: { paper: "#F1EADC", flap: "#E7DFCE", seal: "#7C1F2E" },
+      openingVideo: "https://fira.cursuscapital.co/media/open-botanical.mp4",
       labels: { eyebrow: "Together with their families", teaser: "You are warmly invited",
                 schedule: "The day", details: "When & where", hostedBy: "With love,",
                 song: "♪ Our song", cta: "Confirm attendance" },

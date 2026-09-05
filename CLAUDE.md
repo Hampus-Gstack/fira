@@ -24,3 +24,8 @@ Animated digital invitations SaaS (own product, own brand). See `README.md` for 
 
 - 2026-08-29: `.share-modal` had `display:grid` which overrode the `hidden` attribute — publish modal showed empty on page load. Fix: explicit `.share-modal[hidden]{display:none}`. Rule: any always-`display:x` overlay class needs a `[hidden]` override.
 - 2026-08-29: Playwright couldn't click the envelope (infinite float animation = never "stable") — use `force=True` in tests; not a product bug.
+
+## Opening films (AI video, added 2026-09-05)
+- Themes may set `openingVideo` (URL). Engine preloads it while the seal idles; on tap it plays full-bleed and dissolves into the hero. Falls back to the CSS crack/unfold if not ready, errored, or reduced-motion.
+- Generated with `execution/veo_gen.py` (Veo 3.1 via Gemini API, key = `GEMINI_IMAGE_API_KEY` in `../happa-matcha/.env`). **Paid, ~$1 per 8s Fast clip — ask before generating.** Hosted at `/opt/fira/media/` on the VPS, served by the API at `https://fira.cursuscapital.co/media/<file>` (StaticFiles mount, range requests OK). Strip audio + `-movflags +faststart` before upload.
+- Done: botanical (`open-botanical.mp4`, Veo 3.1 Fast, 9:16 720p, $~1). Pending: the other five themes — Hampus to approve spend.
