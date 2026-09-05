@@ -104,6 +104,64 @@
 .env3.unfolding .env3-addr { opacity: 0; transition: opacity 0.5s; }
 .env3.lifting { opacity: 0; transform: translateY(-8%) scale(1.05); pointer-events: none; }
 
+/* ================= film envelope (video is the envelope) ================= */
+.env4 {
+  position: fixed; inset: 0; z-index: 60; background: #000; overflow: hidden;
+  transition: opacity 1.2s ease, transform 1.3s cubic-bezier(0.5, 0, 0.2, 1);
+}
+.env4-film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.env4-scrim {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,0.22) 0%, transparent 32%, transparent 78%, rgba(0,0,0,0.28) 100%);
+  transition: opacity 0.8s;
+}
+.env4-addr {
+  position: absolute; left: 0; right: 0; top: 13%; z-index: 2; margin: 0; padding: 0 28px;
+  text-align: center; font-family: var(--t-display), serif; font-style: italic;
+  font-size: clamp(26px, 6.4vw, 40px); color: var(--t-env-addr, #FFFDF7);
+  text-shadow: var(--t-env-addr-shadow, 0 1px 2px rgba(0,0,0,0.35), 0 6px 24px rgba(0,0,0,0.35));
+  animation: hero-in 1.6s 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.env4-hint {
+  position: absolute; left: 0; right: 0; bottom: max(30px, env(safe-area-inset-bottom, 30px)); z-index: 2; margin: 0;
+  text-align: center; font-family: var(--t-display), serif; font-style: italic; font-size: 16px;
+  letter-spacing: 0.12em; color: var(--t-env-addr, #FFFDF7); opacity: 0.8; text-shadow: var(--t-env-addr-shadow, 0 1px 3px rgba(0,0,0,0.5));
+  animation: hint-pulse 2.6s ease-in-out infinite;
+}
+.env4-tap { position: absolute; inset: 0; z-index: 3; border: 0; background: transparent; cursor: pointer; }
+.env4.opening .env4-addr, .env4.opening .env4-hint, .env4.opening .env4-scrim { opacity: 0; transition: opacity 0.9s; }
+.env4.lifting { opacity: 0; transform: scale(1.06); pointer-events: none; }
+
+.snd-toggle {
+  position: fixed; right: 14px; bottom: max(18px, env(safe-area-inset-bottom, 18px)); z-index: 75;
+  width: 46px; height: 46px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  color: #fff; background: rgba(20, 18, 16, 0.55); backdrop-filter: blur(8px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
+.snd-toggle svg { width: 20px; height: 20px; }
+.snd-toggle .w1, .snd-toggle .w2 { opacity: 0; }
+.snd-toggle .x { opacity: 1; }
+.snd-toggle.on .w1, .snd-toggle.on .w2 { opacity: 1; }
+.snd-toggle.on .x { opacity: 0; }
+.snd-toggle.on .w1 { animation: snd-wave 1.4s ease-in-out infinite; }
+.snd-toggle.on .w2 { animation: snd-wave 1.4s ease-in-out 0.25s infinite; }
+@keyframes snd-wave { 0%,100% { opacity: 0.45; } 50% { opacity: 1; } }
+
+/* hero with generated backdrop */
+.ch-hero.has-bg { color: var(--t-hero-ink, var(--t-ink)); }
+.hero-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.hero-bg img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  animation: kenburns 28s ease-in-out infinite alternate;
+}
+@keyframes kenburns { from { transform: scale(1) translateY(0); } to { transform: scale(1.08) translateY(-1.5%); } }
+.hero-scrim {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--t-hero-scrim, #F7F3EA) 55%, transparent) 0%, transparent 55%);
+}
+.ch-hero.has-bg .ch-inner { padding-top: 0; align-self: start; margin-top: 8vh; }
+.ch-hero.has-bg .inv-title { text-shadow: 0 1px 0 rgba(255,255,255,0.35); }
+
 /* ================= story ================= */
 .story { position: relative; z-index: 2; }
 .story-progress {
@@ -310,6 +368,8 @@
 .theme-botanical .inv-stage {
   background: radial-gradient(ellipse 60% 40% at 50% 0%, #FDFBF5 0%, transparent 70%), #F7F3EA;
 }
+.theme-botanical { --t-hero-scrim: #FBF6E9; --t-env-addr: #6E2233; --t-env-addr-shadow: 0 1px 0 rgba(255,255,255,0.6); }
+.theme-botanical .ch-hero.has-bg::before { display: none; }
 .theme-botanical .ch-hero::before {
   content: ""; position: absolute; inset: 12px; z-index: 2; pointer-events: none;
   border: 1px solid color-mix(in srgb, var(--t-accent) 45%, transparent); border-radius: 4px;

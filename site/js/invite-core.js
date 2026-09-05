@@ -224,8 +224,9 @@
   // ---------- chapter partials ----------
   function heroChapter(data, theme) {
     return `
-      <section class="ch ch-hero">
-        <div class="ch-art">${theme.art && theme.art.hero ? theme.art.hero(data) : ""}</div>
+      <section class="ch ch-hero ${theme.opening && theme.opening.hero ? "has-bg" : ""}">
+        ${theme.opening && theme.opening.hero ? `<div class="hero-bg"><img src="${esc(theme.opening.hero)}" alt=""></div><div class="hero-scrim"></div>` : ""}
+        <div class="ch-art">${theme.art && theme.art.hero && !(theme.opening && theme.opening.hero) ? theme.art.hero(data) : ""}</div>
         <div class="ch-inner">
           <p class="inv-eyebrow hero-seq s1">${esc(data.eventType || theme.labels.eyebrow || "You're invited")}</p>
           <h1 class="inv-title hero-seq s2 ${theme.titleCls || ""}" ${theme.titleAttr ? `data-text="${esc(data.title || "")}"` : ""}>${esc(data.title || "Your names")}</h1>
@@ -406,6 +407,67 @@
     </svg>`;
   }
 
+  function filmEnvelope(mount, data, theme, opts, onOpen) {
+    const o = theme.opening;
+    const addr = opts.guestName
+      ? `For ${esc(opts.guestName)}`
+      : esc(data.envelopeTeaser || theme.labels.teaser || "You are invited");
+    const env = document.createElement("div");
+    env.className = "env4";
+    env.innerHTML = `
+      <video class="env4-film" poster="${esc(o.poster)}" preload="auto" playsinline muted></video>
+      <div class="env4-scrim"></div>
+      <p class="env4-addr">${addr}</p>
+      <p class="env4-hint">Tap to open</p>
+      <button class="env4-tap" aria-label="Open the invitation"></button>`;
+    mount.appendChild(env);
+    const film = env.querySelector(".env4-film");
+    film.src = o.video;
+    film.load();
+
+    let opened = false, finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      env.classList.add("lifting"); onOpen();
+      setTimeout(() => env.remove(), 1300);
+    };
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
+      if (!opts.noFullscreen) tryFullscreen();
+      env.classList.add("opening");
+      film.muted = !!opts.startMuted;      // user gesture → sound allowed
+      soundState.set(!film.muted);
+      const p = film.play();
+      if (p && p.catch) p.catch(() => { film.muted = true; soundState.set(false); film.play().catch(finish); });
+      film.addEventListener("ended", finish);
+      film.addEventListener("error", finish);
+      setTimeout(finish, 12000);
+    };
+    env.querySelector(".env4-tap").addEventListener("click", open);
+    soundState.bind(film);
+    return env;
+  }
+
+  // Shared sound toggle state (film audio now; ambient loops later).
+  const soundState = {
+    on: false, media: [], btn: null,
+    set(v) { this.on = v; this.media.forEach((m) => (m.muted = !v)); if (this.btn) this.btn.classList.toggle("on", v); },
+    bind(m) { this.media.push(m); },
+  };
+  function soundToggle(stage) {
+    const b = document.createElement("button");
+    b.className = "snd-toggle" + (soundState.on ? " on" : "");
+    b.setAttribute("aria-label", "Toggle sound");
+    b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 5L6 9H3v6h3l5 4V5z"/><path class="w1" d="M15.5 8.5a5 5 0 010 7"/><path class="w2" d="M18.5 5.5a9 9 0 010 13"/><path class="x" d="M16 9l5 6M21 9l-5 6"/></svg>`;
+    b.addEventListener("click", () => soundState.set(!soundState.on));
+    soundState.btn = b;
+    stage.appendChild(b);
+  }
+
   function envelope(mount, data, theme, opts, onOpen) {
     const initials = monogram(data);
     const addr = opts.guestName
@@ -481,7 +543,7 @@
   function render(data, mount, opts = {}) {
     const theme = window.FIRA_TEMPLATES[data.template] || window.FIRA_TEMPLATES.botanical;
     mount.innerHTML = "";
-    document.querySelectorAll(".cta-pill, .fs-toggle, .celebrate-canvas").forEach((el) => el.remove());
+    document.querySelectorAll(".cta-pill, .fs-toggle, .snd-toggle, .celebrate-canvas").forEach((el) => el.remove());
     mount.className = "inv-root theme-" + theme.id;
     if (theme.fonts && !document.getElementById("f-" + theme.id)) {
       const l = document.createElement("link");
@@ -547,7 +609,12 @@
     };
 
     if (opts.skipEnvelope || REDUCED) { showStory(); return; }
-    envelope(stage, data, theme, opts, showStory);
+    if (theme.opening && theme.opening.video && !opts.noFilm) {
+      filmEnvelope(stage, data, theme, opts, showStory);
+      soundToggle(stage);
+    } else {
+      envelope(stage, data, theme, opts, showStory);
+    }
   }
 
   const U = {
