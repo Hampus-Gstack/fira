@@ -1,7 +1,8 @@
 """Fira — invitation + RSVP API.
 
-Zero-cost backend: FastAPI + SQLite on the Cursus VPS behind Caddy.
-No AI calls, no external APIs. All invitation rendering is client-side.
+FastAPI + SQLite behind a reverse proxy. Stores invitations, RSVPs and uploaded photos,
+and serves the theme media in ./media. No external API calls at request time;
+all invitation rendering happens in the browser.
 """
 import json
 import secrets
@@ -135,7 +136,7 @@ def create_invite(body: InviteIn, request: Request):
             "INSERT INTO invites (id, admin_key, data, created_at, updated_at) VALUES (?,?,?,?,?)",
             (invite_id, admin_key, raw, now, now),
         )
-        _bind_photo(conn, body.data)
+        _bind_photos(conn, body.data)
     return {"id": invite_id, "admin_key": admin_key}
 
 
@@ -172,11 +173,14 @@ def update_invite(
     if len(raw.encode()) > MAX_INVITE_BYTES:
         raise HTTPException(413, "Invitation too large")
     with db() as conn:
+        old = conn.execute("SELECT data FROM invites WHERE id=?", (invite_id,)).fetchone()
+        before = _photo_ids(json.loads(old["data"])) if old else set()
         conn.execute(
             "UPDATE invites SET data=?, updated_at=? WHERE id=?",
             (raw, int(time.time()), invite_id),
         )
-        _bind_photo(conn, body.data)
+        _bind_photos(conn, body.data)
+        _release_photos(conn, before - _photo_ids(body.data))
     return {"ok": True}
 
 
@@ -267,16 +271,49 @@ def get_photo(photo_id: str):
     )
 
 
-def _bind_photo(conn, data: dict):
-    pid = data.get("photoId")
-    if pid:
+PHOTO_KEYS = {"photoId", "photo2Id"}
+
+
+def _photo_ids(node, found=None) -> set:
+    """Every uploaded-photo id referenced anywhere in an invitation (main photo, second photo,
+    dress-code images, ...). Walks the whole document so new photo fields are covered automatically."""
+    if found is None:
+        found = set()
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in PHOTO_KEYS and isinstance(value, str) and value:
+                found.add(value)
+            else:
+                _photo_ids(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _photo_ids(value, found)
+    return found
+
+
+def _bind_photos(conn, data: dict):
+    """Mark referenced photos as in use, so the orphan purge in upload_photo never removes them."""
+    for pid in _photo_ids(data):
         conn.execute("UPDATE photos SET bound=1 WHERE id=?", (pid,))
+
+
+def _release_photos(conn, photo_ids):
+    """Delete photos that no invitation references any more."""
+    for pid in photo_ids:
+        used = conn.execute(
+            "SELECT 1 FROM invites WHERE instr(data, ?) > 0 LIMIT 1", (json.dumps(pid),)
+        ).fetchone()
+        if not used:
+            conn.execute("DELETE FROM photos WHERE id=?", (pid,))
 
 
 @app.delete("/api/invites/{invite_id}")
 def delete_invite(invite_id: str, x_admin_key: str | None = Header(default=None)):
     _auth(invite_id, x_admin_key)
     with db() as conn:
+        row = conn.execute("SELECT data FROM invites WHERE id=?", (invite_id,)).fetchone()
+        photo_ids = _photo_ids(json.loads(row["data"])) if row else set()
         conn.execute("DELETE FROM rsvps WHERE invite_id=?", (invite_id,))
         conn.execute("DELETE FROM invites WHERE id=?", (invite_id,))
+        _release_photos(conn, photo_ids)
     return {"ok": True}

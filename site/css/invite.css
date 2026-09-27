@@ -41,7 +41,21 @@
   animation: hint-pulse 2.6s ease-in-out infinite;
 }
 .env4-tap { position: absolute; inset: 0; z-index: 3; border: 0; background: transparent; cursor: pointer; }
-.env4.opening .env4-addr, .env4.opening .env4-hint, .env4.opening .env4-scrim, .env4.opening .env4-mono { opacity: 0; transition: opacity 0.9s; }
+.env4-sound {
+  position: absolute; left: 50%; translate: -50% 0; z-index: 2; margin: 0;
+  bottom: calc(max(30px, env(safe-area-inset-bottom, 30px)) + 44px);
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 12px; border-radius: 999px;
+  font-family: var(--t-body), system-ui, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+  text-transform: uppercase; white-space: nowrap; color: #fff;
+  background: rgba(20, 18, 16, 0.46); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: env-in 1.2s 1.3s ease backwards;
+}
+.env4-sound svg { width: 15px; height: 15px; flex: 0 0 15px; }
+@keyframes env-in { from { opacity: 0; transform: translateY(8px); } }
+/* An element with a filled entrance animation ignores a plain `opacity: 0`, so the exit is an animation too. */
+.env4.opening .env4-addr, .env4.opening .env4-hint, .env4.opening .env4-mono, .env4.opening .env4-sound { animation: env-out 0.7s ease forwards; }
+.env4.opening .env4-scrim { opacity: 0; transition: opacity 0.9s; }
+@keyframes env-out { to { opacity: 0; } }
 .env4.lifting { opacity: 0; transform: scale(1.06); pointer-events: none; }
 @keyframes hint-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.65; } }
 

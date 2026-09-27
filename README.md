@@ -1,29 +1,64 @@
-# Fira — animated digital invitations
+# Fira
 
-Create an animated invitation in minutes: wax-seal envelope opening, six hand-crafted themes, live RSVP tracking. Guests need nothing but the link.
+Animated digital invitations. A guest gets a link, sees a sealed envelope addressed to them, taps it, and a short film opens it into a scrolling story: the day, the place, the programme, dress code, gifts, menu, where to stay, and an RSVP that lands on the host's private dashboard. No app, no account for guests.
 
-**Live (test):** https://hampus-gstack.github.io/fira/
-**API:** https://fira.cursuscapital.co/api
+**Live:** https://hampus-gstack.github.io/fira/
 
-## Architecture
+## Layout
 
-Zero runtime cost by design — no AI calls, no paid APIs, no per-request billing.
+| Path | What |
+|---|---|
+| `site/` | The whole frontend. Static HTML, CSS and vanilla JavaScript, no build step. |
+| `site/js/invite-core.js` | The invitation engine: envelope, film, chapters, RSVP. |
+| `site/js/templates.js` | Theme registry (identity, labels, chapter order, art) and sample data. |
+| `site/css/invite.css` | Engine styles and one block per theme. |
+| `server/` | The API: FastAPI + SQLite. Invitations, RSVPs, uploaded photos, theme media. |
+| `tests/` | End-to-end suite and review-sheet generator (Playwright). |
 
-| Piece | Where | What |
-|---|---|---|
-| Frontend | `site/` → GitHub Pages (static, no build step) | Landing, editor with live preview, invitation viewer, host dashboard |
-| Backend | `server/app.py` → Cursus VPS (`/opt/fira/`, systemd `fira.service`, port 8091 behind Caddy) | FastAPI + SQLite: invites + RSVPs, admin-key auth, rate limiting |
-| Themes | `site/js/templates.js` + `site/css/invite.css` | 6 original animated themes; add a new one = one registry entry + one CSS block |
+Pages: `index.html` (landing), `create.html` (editor with live preview), `i.html` (the invitation), `manage.html` (host dashboard).
 
-Invite links: `i.html?id=<id>`. Host dashboard: `manage.html?id=<id>&key=<admin_key>` — the admin key is the only credential; shown once at publish and cached in the creator's browser (`localStorage`).
+## How an invitation works
+
+1. The host builds it in the editor and publishes. The API stores one JSON document and returns an id and a host key.
+2. The guest link is `i.html?id=<id>`. Adding `&to=<name>` addresses the envelope to that guest and prefills their RSVP.
+3. The host link is `manage.html?id=<id>&key=<host key>`. The key is the only credential: it shows the guest list and allows editing.
+
+## Run locally
+
+```bash
+cd site && python3 -m http.server 8090 --bind 127.0.0.1
+# open http://127.0.0.1:8090  (this origin is on the API's CORS allow-list)
+```
+
+The local site talks to the live API. To run your own, see `server/`:
+
+```bash
+cd server && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app:app --port 8091   # then point site/js/config.js at it
+```
+
+`server/deploy/` holds the systemd unit and the Caddy site block used in production.
+
+## Tests
+
+```bash
+pip install playwright && playwright install chromium
+python tests/e2e.py                 # local site, live API
+python tests/e2e.py --base prod     # the deployed site
+python tests/shots.py --themes chateau,toscana   # review sheets of every chapter
+```
+
+The suite publishes a real invitation through the editor, answers it as a guest, checks the dashboard, edits it and deletes it again.
+
+## Add a theme
+
+1. Add an entry to `FIRA_TEMPLATES` in `site/js/templates.js`: fonts, swatch, labels, the `chapters` it uses and, if it has them, its `opening` media.
+2. Add sample data under the same id in `FIRA_SAMPLES`.
+3. Add a `.theme-<id>` block to `site/css/invite.css`.
+4. Run `tests/shots.py --themes <id>` and look at the sheet.
+
+Chapters available to a theme: hero, photo, message, countdown, details, venue, schedule, dresscode, gifts, menu, accommodation, faq, contact, rsvp. A chapter renders only when the invitation has data for it.
 
 ## Deploy
 
-- **Frontend:** push to `main` → GitHub Actions deploys `site/` to Pages.
-- **Backend:** `scp server/app.py root@178.104.74.214:/opt/fira/app.py && ssh root@178.104.74.214 systemctl restart fira`
-
-## Local dev
-
-```bash
-cd site && python3 -m http.server 8090   # localhost:8090 is CORS-allowed by the API
-```
+Pushing to `main` deploys `site/` to GitHub Pages. The workflow writes the commit hash to `version.txt`, so a deploy can be confirmed from outside.

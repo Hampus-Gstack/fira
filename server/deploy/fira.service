@@ -1,0 +1,15 @@
+# /etc/systemd/system/fira.service
+# The API binds to the Docker bridge gateway so the Caddy container can reach it
+# while it stays unreachable from the internet. Adjust --host for other setups.
+[Unit]
+Description=Fira invitations API
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/fira
+ExecStart=/opt/fira/.venv/bin/uvicorn app:app --host 172.18.0.1 --port 8091
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

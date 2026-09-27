@@ -1,0 +1,4 @@
+# Versions running in production (pip freeze, 2026-09-27)
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
