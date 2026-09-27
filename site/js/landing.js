@@ -133,21 +133,30 @@
       if (tour.asked || !live) return;
       tour.asked = true;
       if (still && still.dataset.src) still.src = still.dataset.src;
-      live.addEventListener("load", () => {
-        try {
-          const doc = live.contentDocument;
-          const style = doc.createElement("style");
-          style.textContent = "html{scrollbar-width:none}html::-webkit-scrollbar{display:none}" +
-            ".cta-pill,.fs-toggle,.snd-toggle,.story-progress{display:none!important}";
-          doc.head.appendChild(style);
-          const wait = (tries) => {
-            if (doc.querySelector(".story .ch-hero")) { tour.ready = true; root.classList.add("live-ready"); }
-            else if (tries > 0) setTimeout(() => wait(tries - 1), 250);
-          };
-          wait(160);
-        } catch (e) { /* the frame is not ours to read: the still stays */ }
-      });
       live.src = live.dataset.src;
+      // Ready means: the story is drawn and its display font has arrived. Waiting for the frame's load
+      // event instead would wait for the hero video too, which takes long on a slow connection.
+      let tries = 0;
+      const look = () => {
+        let doc = null, win = null;
+        try { doc = live.contentDocument; win = live.contentWindow; } catch (e) { return; }   // not ours to read: the still stays
+        const title = doc && doc.querySelector(".story .ch-hero .inv-title");
+        const fonts = doc && doc.querySelector('link[id^="f-"]');
+        if (!title || (fonts && !fonts.sheet && tries < 40)) {
+          if (tries++ < 240) setTimeout(look, 250);
+          return;
+        }
+        const style = doc.createElement("style");
+        style.textContent = "html{scrollbar-width:none}html::-webkit-scrollbar{display:none}" +
+          ".cta-pill,.fs-toggle,.snd-toggle,.story-progress{display:none!important}";
+        doc.head.appendChild(style);
+        let done = false;
+        const ready = () => { if (done) return; done = true; tour.ready = true; root.classList.add("live-ready"); };
+        const family = win.getComputedStyle(title).fontFamily.split(",")[0];
+        if (doc.fonts && doc.fonts.load) doc.fonts.load("40px " + family).then(ready, ready); else ready();
+        setTimeout(ready, 4000);
+      };
+      look();
     }
 
     function tourTo(s) {
