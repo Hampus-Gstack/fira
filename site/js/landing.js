@@ -150,6 +150,9 @@
         style.textContent = "html{scrollbar-width:none}html::-webkit-scrollbar{display:none}" +
           ".cta-pill,.fs-toggle,.snd-toggle,.story-progress{display:none!important}";
         doc.head.appendChild(style);
+        ["venue", "rsvp"].forEach((name) => {         // the chapters the tour stops at: fetch their pictures now
+          doc.querySelectorAll('.ch[data-ch="' + name + '"] img[loading="lazy"]').forEach((img) => { img.loading = "eager"; });
+        });
         let done = false;
         const ready = () => { if (done) return; done = true; tour.ready = true; root.classList.add("live-ready"); };
         const family = win.getComputedStyle(title).fontFamily.split(",")[0];
