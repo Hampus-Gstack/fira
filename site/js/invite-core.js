@@ -35,7 +35,8 @@
     return (t[0] || "F").toUpperCase();
   }
 
-  const photoSrc = (v) => !v ? "" : (/^https?:\/\//.test(v) ? v : API() + "/photos/" + encodeURIComponent(v));
+  // An uploaded photo is referenced by its id; anything that looks like a path or URL is used as is.
+  const photoSrc = (v) => !v ? "" : (/^[A-Za-z0-9_-]+$/.test(v) ? API() + "/photos/" + encodeURIComponent(v) : v);
   const L = (theme, key, fallback) => esc(((theme.labels || {})[key]) || fallback);
 
   // ---------- countdown ----------
