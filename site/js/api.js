@@ -3,9 +3,12 @@
   const BASE = window.FIRA_CONFIG.API_BASE;
 
   async function req(path, opts = {}) {
+    // Merge headers last: spreading opts after them would replace the whole headers object
+    // and drop Content-Type on every call that also sends the host key.
+    const { headers, ...rest } = opts;
     const res = await fetch(BASE + path, {
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
-      ...opts,
+      ...rest,
+      headers: { "Content-Type": "application/json", ...(headers || {}) },
     });
     if (!res.ok) {
       let detail = "";

@@ -93,8 +93,17 @@ init_db()
 _hits: dict[str, list[float]] = {}
 
 
+def client_ip(request: Request) -> str:
+    """The visitor's address. The API is only reachable through the reverse proxy, which sets
+    X-Forwarded-For itself; without this every visitor would share the proxy's address."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
 def rate_limit(request: Request, limit: int = 30, window: float = 60.0):
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
     now = time.time()
     hits = [t for t in _hits.get(ip, []) if now - t < window]
     if len(hits) >= limit:

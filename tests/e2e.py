@@ -183,6 +183,12 @@ class Suite:
         page.goto(self.url("create.html"))
         page.wait_for_selector("#f_title")
         expect(not page.is_visible("#shareModal"), "share dialog is visible before publishing")
+        for where in ("top", "bottom"):
+            page.evaluate("w => scrollTo({top: w === 'top' ? 0 : document.documentElement.scrollHeight, behavior: 'instant'})", where)
+            page.wait_for_timeout(300)
+            box = page.evaluate("(() => { const r = document.getElementById('publishBtn').getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; })()")
+            expect(0 <= box[0] and box[1] <= box[2], f"publish button is off screen at the {where} of the editor")
+        page.locator("#ph_second").click(trial=True, timeout=5000)  # the last field must not sit under the publish bar
         page.frame_locator("#previewFrame").locator(".story .ch-hero").wait_for(timeout=20000)
         page.close()
         self.no_errors("create.html")
@@ -200,10 +206,14 @@ class Suite:
             chapters = page.locator(".ch").count()
             expect(chapters >= 5, f"{t['id']}: only {chapters} chapters rendered")
             expect(page.locator("#rsvp .rf").count() == 1, f"{t['id']}: RSVP form missing")
-            for i in range(chapters):
-                page.evaluate("i => document.querySelectorAll('.ch')[i].scrollIntoView({behavior: 'instant'})", i)
-                page.wait_for_timeout(250)
-            page.wait_for_timeout(1200)
+            height = page.evaluate("document.documentElement.scrollHeight")
+            for y in range(0, height, 600):  # walk the page so lazily loaded images start loading
+                page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", y)
+                page.wait_for_timeout(120)
+            try:
+                page.wait_for_function("[...document.images].every(i => i.complete)", timeout=20000)
+            except Exception:
+                pass  # reported below, by name
             broken = page.evaluate(
                 "[...document.images].filter(i => !(i.complete && i.naturalWidth > 0)).map(i => i.currentSrc || i.src)"
             )
@@ -265,11 +275,13 @@ class Suite:
         for i, p in enumerate(photos.values()):
             write_png(p, tint=(190 - 40 * i, 120 + 30 * i, 110 + 40 * i))
 
-        def upload(page, thumb, file):
+        def upload(page, selector, file):
             with page.expect_file_chooser() as chooser:
-                thumb.click()
+                page.click(selector)
             chooser.value.set_files(str(file))
-            page.wait_for_function("el => getComputedStyle(el).backgroundImage.includes('/photos/')", arg=thumb.element_handle(), timeout=30000)
+            page.wait_for_function(
+                "s => getComputedStyle(document.querySelector(s)).backgroundImage.includes('/photos/')", arg=selector, timeout=30000
+            )
 
         # -- host: build and publish
         host = self.page(1300, 900)
@@ -277,14 +289,14 @@ class Suite:
         host.wait_for_selector("#f_title")
         host.wait_for_function("document.getElementById('f_title').value !== ''")
         host.fill("#f_title", title)
-        upload(host, host.locator("#ph_main"), photos["main"])
-        upload(host, host.locator("#ph_second"), photos["second"])
+        upload(host, "#ph_main", photos["main"])
+        upload(host, "#ph_second", photos["second"])
         host.locator("details.ed-block", has=host.locator("#f_dcTitle")).locator("summary").click()
         before = host.locator("#dcImgList .ed-photo-row").count()
         host.click("#dcImgAdd")
-        row = host.locator("#dcImgList .ed-photo-row").nth(before)
-        upload(host, row.locator(".thumb"), photos["attire"])
-        row.locator("input").fill("Uploaded attire")
+        row = f"#dcImgList .ed-photo-row:nth-child({before + 1})"
+        upload(host, row + " .thumb", photos["attire"])
+        host.fill(row + " input", "Uploaded attire")
         host.click("#publishBtn")
         host.wait_for_selector("#shareModal:not([hidden])", timeout=30000)
         share, manage = host.input_value("#shareUrl"), host.input_value("#manageUrl")
@@ -413,8 +425,9 @@ def main():
                     print(f"FAIL {group:<6} {time.time() - started:5.1f}s  {e}")
                 except Exception as e:
                     failed += 1
-                    last = traceback.extract_tb(e.__traceback__)[-1]
-                    print(f"FAIL {group:<6} {time.time() - started:5.1f}s  {type(e).__name__}: {str(e).splitlines()[0][:200]} (e2e.py:{last.lineno})")
+                    own = [f for f in traceback.extract_tb(e.__traceback__) if f.filename == __file__]
+                    where = f"e2e.py:{own[-1].lineno} `{own[-1].line}`" if own else "outside e2e.py"
+                    print(f"FAIL {group:<6} {time.time() - started:5.1f}s  {type(e).__name__}: {str(e).splitlines()[0][:200]} ({where})")
                 suite.errors = []
         finally:
             suite.cleanup()
