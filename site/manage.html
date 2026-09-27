@@ -10,6 +10,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/site.css">
+<style>
+  .tally { display: grid; gap: 8px; margin: 0 0 24px; }
+  .tally div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 18px; font-size: 15px; }
+  .tally b { margin-right: 10px; }
+  .tally span { white-space: nowrap; margin-right: 14px; color: var(--ink-soft); }
+  .tally span i { font-style: normal; font-weight: 600; color: var(--ink); }
+</style>
 </head>
 <body>
 
@@ -33,7 +40,27 @@
   const key = params.get("key") || (id && (FiraVault.get(id) || {}).admin_key);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  // ---------- no id: list invitations saved on this device ----------
+  // The dashboard speaks the language of the invitation.
+  const WORDS = {
+    en: {
+      copyLink: "Copy guest link", copied: "Copied!", view: "View invitation", edit: "Edit invitation", csv: "Export CSV", refresh: "↻ Refresh",
+      yes: "Yes", no: "No", guestsComing: "Guests coming", total: "Total replies",
+      links: "Personalized guest links", linksSub: "the envelope greets each guest by name",
+      linksPlaceholder: "One guest or family per line:\nAnna & Johan\nFamiljen Berg", generate: "Generate links", copy: "Copy", addName: "Add at least one name above.",
+      guest: "Guest", reply: "Reply", party: "Party", partySize: "Party size", message: "Message", when: "When", date: "Date",
+      coming: "Coming", declined: "Declined", empty: "No replies yet. Share your guest link and watch this page fill up ✦", yourEvent: "Your event",
+    },
+    sv: {
+      copyLink: "Kopiera gästlänk", copied: "Kopierad!", view: "Visa inbjudan", edit: "Redigera inbjudan", csv: "Exportera CSV", refresh: "↻ Uppdatera",
+      yes: "Ja", no: "Nej", guestsComing: "Gäster som kommer", total: "Svar totalt",
+      links: "Personliga gästlänkar", linksSub: "kuvertet hälsar varje gäst med namn",
+      linksPlaceholder: "En gäst eller familj per rad:\nAnna & Johan\nFamiljen Berg", generate: "Skapa länkar", copy: "Kopiera", addName: "Skriv minst ett namn ovan.",
+      guest: "Gäst", reply: "Svar", party: "Antal", partySize: "Antal gäster", message: "Hälsning", when: "När", date: "Datum",
+      coming: "Kommer", declined: "Kommer inte", empty: "Inga svar ännu. Dela gästlänken så fylls sidan på ✦", yourEvent: "Ert evenemang",
+    },
+  };
+
+  // ---------- no id: invitations saved on this device ----------
   if (!id) {
     const mine = FiraVault.all();
     dash.innerHTML = `<h1>My invitations</h1>` + (mine.length
@@ -43,7 +70,7 @@
             <a class="btn btn-ghost" style="padding:8px 16px;font-size:13px" href="manage.html?id=${encodeURIComponent(m.id)}&key=${encodeURIComponent(m.admin_key)}">Dashboard</a>
             <a class="btn btn-ghost" style="padding:8px 16px;font-size:13px" href="i.html?id=${encodeURIComponent(m.id)}" target="_blank">View</a>
           </div></li>`).join("") + `</ul>
-          <p style="font-size:13px;color:var(--ink-soft)">Saved in this browser only. Your private dashboard links keep working anywhere — bookmark them.</p>`
+          <p style="font-size:13px;color:var(--ink-soft)">Saved in this browser only. Your private dashboard links keep working anywhere, so bookmark them.</p>`
       : `<div class="dash-empty"><p>No invitations on this device yet.</p><a class="btn btn-primary" href="create.html">Create your first invitation</a></div>`);
     return;
   }
@@ -55,12 +82,11 @@
 
   // ---------- full dashboard ----------
   try {
-    const [inviteRes, rsvpRes] = await Promise.all([
-      FiraAPI.getInvite(id),
-      FiraAPI.listRsvps(id, key),
-    ]);
+    const [inviteRes, rsvpRes] = await Promise.all([FiraAPI.getInvite(id), FiraAPI.listRsvps(id, key)]);
     const data = inviteRes.data;
     const rsvps = rsvpRes.rsvps;
+    const W = WORDS[data.lang] || WORDS.en;
+    document.documentElement.lang = WORDS[data.lang] ? data.lang : "en";
     FiraVault.save({ id, admin_key: key, title: data.title, template: data.template, date: data.date });
 
     const yes = rsvps.filter((r) => r.attending === "yes");
@@ -70,50 +96,60 @@
     const shareUrl = base + "i.html?id=" + id;
     const qLabels = [...new Set(rsvps.flatMap((r) => Object.keys(r.answers || {})))];
 
+    // What the kitchen needs: how many of each choice, counted over the guests who are coming.
+    const tallies = (data.questions || []).filter((q) => (q.options || []).length).map((q) => {
+      const counts = {};
+      yes.forEach((r) => String((r.answers || {})[q.label] || "").split(",").map((v) => v.trim()).filter(Boolean)
+        .forEach((v) => { counts[v] = (counts[v] || 0) + 1; }));
+      const parts = q.options.filter((o) => counts[o]).map((o) => `<span>${esc(o)} <i>${counts[o]}</i></span>`).join("");
+      return parts ? `<div><b>${esc(q.label)}</b>${parts}</div>` : "";
+    }).join("");
+
     dash.innerHTML = `
-      <h1>${esc(data.title || "Your event")}</h1>
+      <h1>${esc(data.title || W.yourEvent)}</h1>
       <p style="color:var(--ink-soft);margin-top:-8px">${esc(data.eventType || "")}${data.date ? " · " + esc(data.date) : ""}${data.venue ? " · " + esc(data.venue) : ""}</p>
       <div class="dash-tools">
-        <button class="btn btn-primary" id="copyLink">Copy guest link</button>
-        <a class="btn btn-ghost" href="i.html?id=${encodeURIComponent(id)}" target="_blank">View invitation</a>
-        <a class="btn btn-ghost" href="create.html?edit=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}">Edit invitation</a>
-        <button class="btn btn-ghost" id="csvBtn">Export CSV</button>
-        <button class="btn btn-ghost" id="refreshBtn">↻ Refresh</button>
+        <button class="btn btn-primary" id="copyLink">${W.copyLink}</button>
+        <a class="btn btn-ghost" href="i.html?id=${encodeURIComponent(id)}" target="_blank">${W.view}</a>
+        <a class="btn btn-ghost" href="create.html?edit=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}">${W.edit}</a>
+        <button class="btn btn-ghost" id="csvBtn">${W.csv}</button>
+        <button class="btn btn-ghost" id="refreshBtn">${W.refresh}</button>
       </div>
       <div class="stat-row">
-        <div class="stat s-yes"><b>${yes.length}</b><span>Yes</span></div>
-        <div class="stat s-no"><b>${no.length}</b><span>No</span></div>
-        <div class="stat"><b>${guests}</b><span>Guests coming</span></div>
-        <div class="stat"><b>${rsvps.length}</b><span>Total replies</span></div>
+        <div class="stat s-yes"><b>${yes.length}</b><span>${W.yes}</span></div>
+        <div class="stat s-no"><b>${no.length}</b><span>${W.no}</span></div>
+        <div class="stat"><b>${guests}</b><span>${W.guestsComing}</span></div>
+        <div class="stat"><b>${rsvps.length}</b><span>${W.total}</span></div>
       </div>
+      ${tallies ? `<div class="tally" id="tally">${tallies}</div>` : ""}
       <details style="margin:0 0 26px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:6px 20px">
-        <summary style="cursor:pointer;font-weight:600;padding:12px 0">✉️ Personalized guest links <span style="font-weight:400;color:var(--ink-soft);font-size:13px">— the envelope greets each guest by name</span></summary>
+        <summary style="cursor:pointer;font-weight:600;padding:12px 0">✉️ ${W.links} <span style="font-weight:400;color:var(--ink-soft);font-size:13px">· ${W.linksSub}</span></summary>
         <div style="padding:6px 0 16px">
-          <textarea id="plNames" rows="3" placeholder="One guest or family per line:&#10;Anna & Johan&#10;Familjen Berg" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-family:var(--body);font-size:14px;box-sizing:border-box"></textarea>
-          <button class="btn btn-ghost" id="plGen" style="margin-top:10px;padding:9px 20px;font-size:14px">Generate links</button>
+          <textarea id="plNames" rows="3" placeholder="${esc(W.linksPlaceholder)}" style="width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-family:var(--body);font-size:14px;box-sizing:border-box"></textarea>
+          <button class="btn btn-ghost" id="plGen" style="margin-top:10px;padding:9px 20px;font-size:14px">${W.generate}</button>
           <div id="plOut" style="margin-top:12px;display:grid;gap:6px"></div>
         </div>
       </details>
       ${rsvps.length ? `
       <div style="overflow-x:auto"><table class="dash-table">
-        <thead><tr><th>Guest</th><th>Reply</th><th>Party</th>${qLabels.map((q) => `<th>${esc(q)}</th>`).join("")}<th>Message</th><th>When</th></tr></thead>
+        <thead><tr><th>${W.guest}</th><th>${W.reply}</th><th>${W.party}</th>${qLabels.map((q) => `<th>${esc(q)}</th>`).join("")}<th>${W.message}</th><th>${W.when}</th></tr></thead>
         <tbody>${rsvps.map((r) => `
           <tr>
             <td><b>${esc(r.guest_name)}</b></td>
-            <td><span class="pill ${r.attending === "yes" ? "pill-yes" : "pill-no"}">${r.attending === "yes" ? "Coming" : "Declined"}</span></td>
-            <td>${r.party_size}</td>
+            <td><span class="pill ${r.attending === "yes" ? "pill-yes" : "pill-no"}">${r.attending === "yes" ? W.coming : W.declined}</span></td>
+            <td>${r.attending === "yes" ? r.party_size : "—"}</td>
             ${qLabels.map((q) => `<td>${esc((r.answers || {})[q] || "—")}</td>`).join("")}
             <td>${esc(r.message || "—")}</td>
-            <td style="white-space:nowrap;color:var(--ink-soft);font-size:13px">${new Date(r.created_at * 1000).toLocaleDateString()}</td>
+            <td style="white-space:nowrap;color:var(--ink-soft);font-size:13px">${new Date(r.created_at * 1000).toLocaleDateString(data.lang === "sv" ? "sv-SE" : undefined)}</td>
           </tr>`).join("")}
         </tbody></table></div>`
-      : `<div class="dash-empty"><p>No replies yet. Share your guest link and watch this page fill up ✦</p></div>`}
+      : `<div class="dash-empty"><p>${W.empty}</p></div>`}
     `;
 
     document.getElementById("copyLink").addEventListener("click", () => {
       navigator.clipboard.writeText(shareUrl);
-      document.getElementById("copyLink").textContent = "Copied!";
-      setTimeout(() => (document.getElementById("copyLink").textContent = "Copy guest link"), 1500);
+      document.getElementById("copyLink").textContent = W.copied;
+      setTimeout(() => (document.getElementById("copyLink").textContent = W.copyLink), 1500);
     });
     document.getElementById("refreshBtn").addEventListener("click", () => location.reload());
     document.getElementById("plGen").addEventListener("click", () => {
@@ -122,29 +158,30 @@
       out.innerHTML = names.map((n) =>
         `<div style="display:flex;gap:8px;align-items:center">
           <input readonly value="${esc(shareUrl + "&to=" + encodeURIComponent(n))}" style="flex:1;padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px">
-          <button class="btn btn-ghost" data-pl="${esc(n)}" style="padding:7px 14px;font-size:13px">Copy</button>
-        </div>`).join("") || '<p style="font-size:13px;color:var(--ink-soft)">Add at least one name above.</p>';
+          <button class="btn btn-ghost" data-pl="${esc(n)}" style="padding:7px 14px;font-size:13px">${W.copy}</button>
+        </div>`).join("") || `<p style="font-size:13px;color:var(--ink-soft)">${W.addName}</p>`;
       out.querySelectorAll("[data-pl]").forEach((b) => b.addEventListener("click", () => {
         navigator.clipboard.writeText(shareUrl + "&to=" + encodeURIComponent(b.dataset.pl));
-        b.textContent = "Copied!"; setTimeout(() => (b.textContent = "Copy"), 1400);
+        b.textContent = W.copied; setTimeout(() => (b.textContent = W.copy), 1400);
       }));
     });
     document.getElementById("csvBtn").addEventListener("click", () => {
-      const head = ["Guest", "Reply", "Party size", ...qLabels, "Message", "Date"];
+      const head = [W.guest, W.reply, W.partySize, ...qLabels, W.message, W.date];
       const cell = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
       const rows = rsvps.map((r) => [
-        r.guest_name, r.attending, r.party_size,
+        r.guest_name, r.attending === "yes" ? W.coming : W.declined, r.party_size,
         ...qLabels.map((q) => (r.answers || {})[q] || ""),
         r.message, new Date(r.created_at * 1000).toISOString().slice(0, 10),
       ].map(cell).join(","));
-      const blob = new Blob([head.map(cell).join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
+      // The byte-order mark makes Excel read å, ä and ö correctly.
+      const blob = new Blob(["﻿" + head.map(cell).join(",") + "\n" + rows.join("\n")], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "fira-guests-" + id + ".csv";
       a.click();
     });
   } catch (err) {
-    dash.innerHTML = `<div class="dash-empty"><p>${err.status === 403 || err.status === 401 ? "That host key isn't valid for this invitation." : "Couldn't load the dashboard — check your connection."}</p></div>`;
+    dash.innerHTML = `<div class="dash-empty"><p>${err.status === 403 || err.status === 401 ? "That host key isn't valid for this invitation." : "Couldn't load the dashboard. Check your connection."}</p></div>`;
   }
 })();
 </script>

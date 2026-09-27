@@ -1,8 +1,15 @@
-// Fira invitation engine v5 — film envelope (video is the envelope), hero
-// video loops, and a composable chapter system: hero · photo · message ·
-// countdown · details · venue · schedule · dresscode · gifts · menu ·
-// accommodation · faq · contact · rsvp. Themes pick their chapter order and
-// bring identity + generated art; the mechanics live here.
+// Fira invitation engine v6.
+//
+// An invitation is one JSON document. It is shown as a sealed envelope (a film whose first
+// frame is the envelope, or a coded envelope for themes without a film) that opens into a
+// story made of chapters:
+//
+//   hero · photo · message · countdown · details · venue · place:<n> · schedule · dresscode
+//   gifts · menu · accommodation · faq · contact · music · section:<key> · rsvp
+//
+// The order comes from the invitation (`chapters`), else the theme, else DEFAULT_ORDER.
+// A chapter renders only when the invitation has data for it. Words come from i18n.js.
+// Everything a host can type is escaped, and links are limited to http(s), mailto and tel.
 (function () {
   const esc = (s) =>
     String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
@@ -12,46 +19,96 @@
   const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const API = () => window.FIRA_CONFIG.API_BASE;
 
-  function fmtDate(dateStr, lang) {
+  // ---------- words ----------
+  let LBL = {};
+  function buildLabels(data, theme) {
+    const packs = window.FIRA_I18N || { en: {} };
+    const lang = packs[data.lang] ? data.lang : "en";
+    const themeWords = lang === "en" ? (theme.labels || {}) : ((theme.i18n || {})[lang] || {});
+    LBL = Object.assign({}, packs.en, lang === "en" ? {} : packs[lang], themeWords, data.labels || {});
+    LBL._lang = lang;
+  }
+  const word = (key, fallback) => (LBL[key] != null && LBL[key] !== "" ? LBL[key] : (fallback != null ? fallback : ""));
+  const T = (key, fallback) => esc(word(key, fallback));
+
+  // ---------- host-provided values ----------
+  function safeUrl(u) {
+    const s = String(u == null ? "" : u).trim();
+    if (!s) return "";
+    if (/^(https?:|mailto:|tel:)/i.test(s)) return s;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return "";   // javascript:, data: and every other scheme
+    return s.startsWith("//") ? "https:" + s : s;     // a path on this site
+  }
+  const safeColor = (c) => {
+    const s = String(c || "").trim();
+    return /^#[0-9a-f]{3,8}$/i.test(s) || /^[a-z]{3,20}$/i.test(s) ? s : "transparent";
+  };
+  // An uploaded photo is referenced by its id; anything that looks like a path or URL is used as is.
+  const photoSrc = (v) => !v ? "" : (/^[A-Za-z0-9_-]+$/.test(v) ? API() + "/photos/" + encodeURIComponent(v) : safeUrl(v));
+  const paragraphs = (text, cls) => esc(text).split(/\n+/).filter((l) => l.trim())
+    .map((l) => `<p class="${cls} reveal">${l}</p>`).join("");
+  const mapsUrl = (query) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query);
+
+  // ---------- dates ----------
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+  // `inSentence` keeps the language's own casing ("tisdag 15 juni"), for use after other words.
+  function fmtDate(dateStr, inSentence) {
     if (!dateStr) return "";
     const d = new Date(dateStr + "T12:00:00");
     if (isNaN(d)) return dateStr;
-    return d.toLocaleDateString(lang || "en-GB", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric",
-    });
+    const text = d.toLocaleDateString(word("locale", "en-GB"), { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    return inSentence ? text : cap(text);
   }
+  // A chapter heading. Script typefaces cannot carry a word in capitals ("OSA", "RSVP", "FAQ"),
+  // so those are set in the text face instead.
+  const h2 = (text) => {
+    const t = String(text == null ? "" : text);
+    const caps = t.length <= 6 && /[A-ZÅÄÖ]/.test(t) && t === t.toUpperCase();
+    return `<h2 class="inv-h2 reveal${caps ? " h-caps" : ""}">${esc(t)}</h2>`;
+  };
   function fmtShort(dateStr) {
     if (!dateStr) return "";
     const [y, m, d] = dateStr.split("-");
     return y && m && d ? `${d}.${m}.${y.slice(2)}` : dateStr;
   }
+  const longDate = (data) => data.dateText || fmtDate(data.date);
 
-  // "Alma & Theo" -> "A·T"; explicit sealText wins.
-  function monogram(data) {
-    if (data.sealText) return String(data.sealText).slice(0, 3);
-    const t = (data.title || "").trim();
-    const parts = t.split(/\s*(?:&|\+|and|och)\s*/i).filter(Boolean);
-    if (parts.length >= 2) return (parts[0][0] + "·" + parts[1][0]).toUpperCase();
-    return (t[0] || "F").toUpperCase();
+  // The moment a wall-clock time happens in a given time zone.
+  function zonedToUtc(date, time, zone) {
+    const [y, m, d] = date.split("-").map(Number);
+    const [hh, mm] = time.split(":").map(Number);
+    const guess = Date.UTC(y, m - 1, d, hh, mm);
+    const parts = {};
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    }).formatToParts(new Date(guess)).forEach((p) => { parts[p.type] = Number(p.value); });
+    const shown = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+    return new Date(guess - (shown - guess));
+  }
+  // When the event starts. With `timezone` it is the same instant for every guest, wherever they are.
+  function eventInstant(data) {
+    if (!data.date) return null;
+    const time = /^\d{1,2}:\d{2}$/.test(data.time || "") ? data.time.padStart(5, "0") : "12:00";
+    if (data.timezone) {
+      try { return zonedToUtc(data.date, time, data.timezone); } catch (e) { /* unknown zone: fall through */ }
+    }
+    const d = new Date(data.date + "T" + time);
+    return isNaN(d) ? null : d;
   }
 
-  // An uploaded photo is referenced by its id; anything that looks like a path or URL is used as is.
-  const photoSrc = (v) => !v ? "" : (/^[A-Za-z0-9_-]+$/.test(v) ? API() + "/photos/" + encodeURIComponent(v) : v);
-  const L = (theme, key, fallback) => esc(((theme.labels || {})[key]) || fallback);
-
   // ---------- countdown ----------
-  function countdown(el, dateStr, timeStr) {
+  function countdown(el, data) {
     if (!el) return;
-    if (!dateStr) { el.remove(); return; }
-    const target = new Date(dateStr + "T" + (timeStr || "00:00"));
-    if (isNaN(target)) { el.remove(); return; }
+    const target = eventInstant(data);
+    if (!target) { el.remove(); return; }
     const units = [["days", 86400000], ["hours", 3600000], ["minutes", 60000], ["seconds", 1000]];
     el.innerHTML = units
-      .map(([u], i) => `${i ? '<span class="cd-colon" aria-hidden="true">:</span>' : ""}<div class="cd-cell"><span class="cd-num" data-u="${u}">&nbsp;</span><span class="cd-lbl">${u}</span></div>`)
+      .map(([u], i) => `${i ? '<span class="cd-colon" aria-hidden="true">:</span>' : ""}<div class="cd-cell"><span class="cd-num" data-u="${u}">&nbsp;</span><span class="cd-lbl">${T(u)}</span></div>`)
       .join("");
     function tick() {
+      if (!el.isConnected) return;
       let diff = target - Date.now();
-      if (diff < 0) { el.innerHTML = `<p class="cd-today">Today is the day ✦</p>`; return; }
+      if (diff < 0) { el.innerHTML = `<p class="cd-today">${T("today")}</p>`; return; }
       for (const [u, ms] of units) {
         const v = Math.floor(diff / ms);
         diff -= v * ms;
@@ -69,17 +126,24 @@
     tick();
   }
 
-  // ---------- .ics ----------
+  // ---------- calendar file ----------
   function icsHref(data) {
-    if (!data.date) return null;
-    const dt = (data.date || "").replace(/-/g, "");
-    const tm = (data.time || "12:00").replace(":", "") + "00";
+    const start = eventInstant(data);
+    if (!start) return null;
+    const hours = Number(data.durationHours) > 0 ? Number(data.durationHours) : 6;
+    const end = new Date(start.getTime() + hours * 3600000);
+    const pad = (n) => String(n).padStart(2, "0");
+    const stamp = data.timezone
+      ? (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`
+      : (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+    const text = (s) => String(s || "").replace(/\s*\r?\n\s*/g, " ").replace(/([\\;,])/g, "\\$1");
     const lines = [
       "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Fira//EN", "BEGIN:VEVENT",
       "UID:" + (data._id || Math.random().toString(36).slice(2)) + "@fira",
-      "DTSTART:" + dt + "T" + tm, "DTEND:" + dt + "T235900",
-      "SUMMARY:" + (data.title || "Event").replace(/[,;]/g, " "),
-      "LOCATION:" + ((data.venue || "") + " " + (data.address || "")).trim().replace(/[,;]/g, " "),
+      "DTSTAMP:" + stamp(new Date()).replace(/Z?$/, "Z"),
+      "DTSTART:" + stamp(start), "DTEND:" + stamp(end),
+      "SUMMARY:" + text(data.calendarTitle || data.title || "Event"),
+      "LOCATION:" + text([data.venue, data.address].filter(Boolean).join(", ")),
       "END:VEVENT", "END:VCALENDAR",
     ];
     return "data:text/calendar;charset=utf-8," + encodeURIComponent(lines.join("\r\n"));
@@ -145,7 +209,7 @@
     })();
   }
 
-  // ---------- pointer / gyro parallax ----------
+  // ---------- pointer / gyro parallax (uses the `translate` property; position with margins) ----------
   function parallax(stage) {
     if (REDUCED) return;
     const els = () => stage.querySelectorAll("[data-depth]");
@@ -173,7 +237,7 @@
     }, { passive: true });
   }
 
-  // ---------- scroll-story engine ----------
+  // ---------- scroll-story engine: every chapter gets --p, 0 entering, 1 leaving ----------
   function storyEngine(root) {
     if (window.__firaStoryCleanup) window.__firaStoryCleanup();
     const chapters = [...root.querySelectorAll(".ch")];
@@ -245,12 +309,11 @@
     const fn = document.exitFullscreen || document.webkitExitFullscreen;
     if (fn) { try { fn.call(document).catch(() => {}); } catch (e) {} }
   }
-  function isFullscreen() {
-    return !!(document.fullscreenElement || document.webkitFullscreenElement);
-  }
+  const isFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
 
   // ======================================================================
-  // Chapters. Each returns "" when its data is absent.
+  // Chapters. Each returns "" when the invitation has nothing for it.
+  // Signature: (data, theme, opts, arg) where arg is what follows ":" in the chapter name.
   // ======================================================================
   const frameCorners = () => ["tl", "tr", "bl", "br"].map((c) => `
     <svg class="hf-corner ${c}" viewBox="0 0 100 100" aria-hidden="true">
@@ -259,6 +322,18 @@
       <path d="M22,22 c8,-6 18,-4 22,4 c-6,2 -12,0 -16,-4 c-4,4 -10,6 -16,4 c4,-8 14,-10 22,-4 z" fill="currentColor" opacity="0.8"/>
       <circle cx="40" cy="40" r="2.4" fill="currentColor"/>
     </svg>`).join("");
+
+  const button = (href, label, sub, cls) => {
+    const url = safeUrl(href);
+    if (!url) return "";
+    const external = /^https?:/i.test(url) ? ' target="_blank" rel="noopener"' : "";
+    return `<a class="inv-btn ${cls || "ghost"}" href="${esc(url)}"${external}>${sub ? `<b>${esc(label)}</b><small>${esc(sub)}</small>` : esc(label)}</a>`;
+  };
+  const calendarButton = (data, withSub) => {
+    const ics = icsHref(data);
+    if (!ics) return "";
+    return `<a class="inv-btn ghost" href="${ics}" download="fira-event.ics">${withSub ? `<b>${T("calendar")}</b><small>${T("calendarSub")}</small>` : T("calendar")}</a>`;
+  };
 
   const CH = {
     hero(data, theme) {
@@ -272,8 +347,9 @@
       const hasBg = !!(o.heroVideo || o.hero);
       const art = theme.art && theme.art.hero && !hasBg ? theme.art.hero(data) : "";
       const split = theme.heroLayout === "split";
-      const eyebrow = esc(data.eventType || theme.labels.eyebrow || "You're invited");
-      const dateLong = esc(fmtDate(data.date, data.lang)) + (data.time ? " · " + esc(data.time) : "");
+      const eyebrow = esc(data.eventType || word("eyebrow"));
+      const showTime = data.time && !data.dateText;
+      const dateLine = esc(longDate(data)) + (showTime ? " · " + esc(data.time) : "");
       return `
       <section class="ch ch-hero ${hasBg ? "has-bg" : ""} ${split ? "hero-split" : ""}" data-ch="hero">
         ${bg}${hasBg ? '<div class="hero-scrim"></div>' : ""}
@@ -281,45 +357,46 @@
         <div class="ch-art">${art}</div>
         <div class="ch-inner">
           ${split ? `<div class="hero-top"><p class="inv-eyebrow hero-seq s1">${eyebrow}</p><p class="inv-date-short hero-seq s1">${esc(fmtShort(data.date))}</p></div>` : `<p class="inv-eyebrow hero-seq s1">${eyebrow}</p>`}
-          <h1 class="inv-title hero-seq s2 ${theme.titleCls || ""}" ${theme.titleAttr ? `data-text="${esc(data.title || "")}"` : ""}>${esc(data.title || "Your names")}</h1>
+          <h1 class="inv-title hero-seq s2 ${theme.titleCls || ""}" ${theme.titleAttr ? `data-text="${esc(data.title || "")}"` : ""}>${esc(data.title || "")}</h1>
           ${data.subtitle ? `<p class="inv-subtitle hero-seq s3">${esc(data.subtitle)}</p>` : ""}
           <div class="hero-seq s4">${theme.art && theme.art.divider ? theme.art.divider : ""}</div>
-          ${split ? "" : `<p class="inv-date hero-seq s5">${dateLong}</p>`}
+          ${split ? "" : `<p class="inv-date hero-seq s5">${dateLine}</p>`}
+          ${data.heroNote ? `<p class="inv-hero-note hero-seq s5">${esc(data.heroNote)}</p>` : ""}
         </div>
         <div class="ch-chevron hero-seq s6" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 9l7 7 7-7"/></svg></div>
       </section>`;
     },
 
     photo(data, theme) {
-      const src = photoSrc(data.photoUrl || data.photoId);
+      const src = photoSrc(data.photoId || data.photoUrl);
       if (!src) return "";
       return `
       <section class="ch ch-photo" data-ch="photo">
-        <figure class="ph-frame ${theme.photoFrame ? "pf-" + theme.photoFrame : ""}"><img src="${esc(src)}" alt=""></figure>
+        <figure class="ph-frame ${theme.photoFrame ? "pf-" + theme.photoFrame : ""} reveal"><img src="${esc(src)}" alt=""></figure>
+        ${data.photoCaption ? `<p class="ph-caption reveal">${esc(data.photoCaption)}</p>` : ""}
       </section>`;
     },
 
     message(data, theme) {
       if (!data.message) return "";
-      const lines = esc(data.message).split("\n").filter(Boolean)
-        .map((l) => `<p class="msg-line reveal">${l}</p>`).join("");
       return `
       <section class="ch ch-message" data-ch="message">
         <div class="ch-inner">
-          ${data.messageTitle ? `<h2 class="inv-h2 reveal">${esc(data.messageTitle)}</h2>` : `<div class="msg-mark reveal" aria-hidden="true">${theme.ornament || "✦"}</div>`}
-          ${lines}
-          ${data.hosts && !data.messageTitle ? `<p class="msg-sig reveal">— ${esc(data.hosts)}</p>` : ""}
+          ${theme.art && theme.art.message ? theme.art.message : ""}
+          ${data.messageTitle ? `${h2(data.messageTitle)}` : `<div class="msg-mark reveal" aria-hidden="true">${theme.ornament || "✦"}</div>`}
+          ${paragraphs(data.message, "msg-line")}
+          ${data.hosts && !data.messageTitle && !data.hideMessageSignature ? `<p class="msg-sig reveal">— ${esc(data.hosts)}</p>` : ""}
         </div>
       </section>`;
     },
 
-    countdown(data, theme) {
-      if (!data.date) return "";
+    countdown(data) {
+      if (!eventInstant(data)) return "";
       return `
       <section class="ch ch-countdown" data-ch="countdown">
         <div class="ch-inner">
-          <h2 class="inv-h2 reveal">${L(theme, "countdown", "The countdown")}</h2>
-          ${theme.labels.countdownSub ? `<p class="inv-sub reveal">${esc(theme.labels.countdownSub)}</p>` : ""}
+          ${h2(word("countdown"))}
+          ${word("countdownSub") ? `<p class="inv-sub reveal">${T("countdownSub")}</p>` : ""}
           <div class="inv-countdown reveal"></div>
         </div>
       </section>`;
@@ -327,25 +404,20 @@
 
     details(data, theme) {
       const q = [data.venue, data.address].filter(Boolean).join(", ");
+      if (!q && !data.date) return "";
       const map = q && theme.showMap !== false
         ? `<div class="map-card reveal"><iframe title="Map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
              src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=15&output=embed"></iframe></div>` : "";
-      const mapBtn = (data.mapUrl || q)
-        ? `<a class="inv-btn ghost" href="${esc(data.mapUrl || "https://maps.google.com/?q=" + encodeURIComponent(q))}" target="_blank" rel="noopener">Get directions</a>` : "";
-      const ics = icsHref(data);
-      const calBtn = ics ? `<a class="inv-btn ghost" href="${ics}" download="fira-event.ics">Add to calendar</a>` : "";
-      const songBtn = data.songUrl
-        ? `<a class="inv-btn ghost" href="${esc(data.songUrl)}" target="_blank" rel="noopener">${L(theme, "song", "♪ Our song")}</a>` : "";
       return `
       <section class="ch ch-details" data-ch="details">
         <div class="ch-inner">
-          <h2 class="inv-h2 reveal">${L(theme, "details", "When & where")}</h2>
-          <p class="inv-date big reveal">${esc(fmtDate(data.date, data.lang))}</p>
+          ${h2(word("details"))}
+          <p class="inv-date big reveal">${esc(longDate(data))}</p>
           ${data.time ? `<p class="inv-time reveal">${esc(data.time)}</p>` : ""}
           ${data.venue ? `<p class="inv-venue reveal">${esc(data.venue)}</p>` : ""}
           ${data.address ? `<p class="inv-address reveal">${esc(data.address)}</p>` : ""}
           ${map}
-          <div class="inv-cta reveal">${mapBtn}${calBtn}${songBtn}</div>
+          <div class="inv-cta reveal">${q ? button(data.mapUrl || mapsUrl(q), word("directions")) : ""}${calendarButton(data)}${button(data.songUrl, word("song"))}</div>
           <div class="inv-countdown reveal"></div>
         </div>
       </section>`;
@@ -354,21 +426,43 @@
     venue(data, theme) {
       if (!data.venue && !data.address) return "";
       const q = [data.venue, data.address].filter(Boolean).join(", ");
-      const art = data.venueImageUrl || (theme.assets && theme.assets.venue);
-      const ics = icsHref(data);
+      const art = safeUrl(data.venueImageUrl || (theme.assets && theme.assets.venue));
       return `
       <section class="ch ch-venue" data-ch="venue">
         <div class="ch-inner">
           ${art ? `<figure class="venue-art reveal"><img src="${esc(art)}" alt="" loading="lazy"></figure>` : ""}
-          <h2 class="inv-h2 reveal">${L(theme, "venue", "The venue")}</h2>
+          ${h2(word("venue"))}
           ${data.venue ? `<p class="inv-venue reveal">${esc(data.venue)}</p>` : ""}
           ${data.address ? `<p class="inv-address reveal">${esc(data.address)}</p>` : ""}
-          ${data.time ? `<p class="inv-time reveal">${esc(fmtDate(data.date, data.lang))} · ${esc(data.time)}</p>` : ""}
-          <div class="inv-cta reveal">
-            <a class="inv-btn ghost" href="${esc(data.mapUrl || "https://maps.google.com/?q=" + encodeURIComponent(q))}" target="_blank" rel="noopener"><b>Get directions</b><small>Open in Google Maps</small></a>
-            ${ics ? `<a class="inv-btn ghost" href="${ics}" download="fira-event.ics"><b>Add to calendar</b><small>Save the date</small></a>` : ""}
-          </div>
+          ${data.time ? `<p class="inv-time reveal">${esc(longDate(data))} · ${esc(data.time)}</p>` : ""}
+          <div class="inv-cta reveal">${button(data.mapUrl || mapsUrl(q), word("directions"), word("directionsSub"))}${calendarButton(data, true)}</div>
           ${theme.showMap ? `<div class="map-card reveal"><iframe title="Map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=15&output=embed"></iframe></div>` : ""}
+        </div>
+      </section>`;
+    },
+
+    // One of several places (ceremony, dinner, ...): `places[n]`, used as "place:<n>".
+    place(data, theme, opts, arg) {
+      const index = parseInt(arg || "0", 10) || 0;
+      const p = (data.places || [])[index];
+      if (!p || !(p.name || p.title)) return "";
+      const q = p.mapQuery || [p.name, p.address].filter(Boolean).join(", ");
+      const image = photoSrc(p.photoId || p.imageUrl);
+      const art = image
+        ? `<figure class="venue-art reveal"><img src="${esc(image)}" alt="" loading="lazy"></figure>`
+        : (theme.art && theme.art.place ? theme.art.place(p, index) : "");
+      return `
+      <section class="ch ch-place place-${index}" data-ch="place">
+        <div class="ch-inner">
+          ${art}
+          ${p.title ? `${h2(p.title)}` : ""}
+          ${p.dateText ? `<p class="pl-date reveal">${esc(p.dateText)}</p>` : ""}
+          ${p.time ? `<p class="pl-time reveal">${esc(p.time)}</p>` : ""}
+          ${p.lead ? `<p class="inv-p pl-lead reveal">${esc(p.lead)}</p>` : ""}
+          ${p.name ? `<p class="inv-venue reveal">${esc(p.name)}</p>` : ""}
+          ${p.address ? `<p class="inv-address reveal">${esc(p.address)}</p>` : ""}
+          ${p.note ? `<p class="inv-p pl-note reveal">${esc(p.note)}</p>` : ""}
+          <div class="inv-cta reveal">${q ? button(p.mapUrl || mapsUrl(q), word("directions"), word("directionsSub")) : ""}${p.calendar ? calendarButton(data, true) : ""}</div>
         </div>
       </section>`;
     },
@@ -379,8 +473,8 @@
       return `
       <section class="ch ch-schedule" data-ch="schedule">
         <div class="ch-inner">
-          <h2 class="inv-h2 reveal">${L(theme, "schedule", "Schedule")}</h2>
-          ${theme.labels.scheduleSub ? `<p class="inv-sub reveal">${esc(theme.labels.scheduleSub)}</p>` : ""}
+          ${h2(word("schedule"))}
+          ${word("scheduleSub") ? `<p class="inv-sub reveal">${T("scheduleSub")}</p>` : ""}
           <ol class="inv-timeline ${theme.timelineStyle ? "tl-" + theme.timelineStyle : ""}">
             <i class="tl-line" aria-hidden="true"></i>
             ${theme.timelineCap ? `<i class="tl-cap" aria-hidden="true">${theme.timelineCap}</i>` : ""}
@@ -394,103 +488,158 @@
       </section>`;
     },
 
-    dresscode(data, theme) {
+    dresscode(data) {
       const dc = data.dressCode;
-      if (!dc || !(dc.text || (dc.palette || []).length || (dc.images || []).length)) return "";
+      if (!dc || !(dc.text || dc.lead || (dc.palette || []).length || (dc.images || []).length)) return "";
       const palette = (dc.palette || []).length
-        ? `<div class="dc-palette reveal">${dc.palette.map((p) => `<span class="dc-swatch"><i style="background:${esc(p.color)}"></i>${p.label ? `<small>${esc(p.label)}</small>` : ""}</span>`).join("")}</div>` : "";
-      const images = (dc.images || []).length
-        ? `<div class="dc-images">${dc.images.map((im) => `<figure class="dc-img reveal"><img src="${esc(photoSrc(im.url || im.photoId))}" alt="" loading="lazy">${im.caption ? `<figcaption>${esc(im.caption)}</figcaption>` : ""}</figure>`).join("")}</div>` : "";
+        ? `<div class="dc-palette reveal">${dc.palette.map((p) => `<span class="dc-swatch"><i style="background:${safeColor(p.color)}"></i>${p.label ? `<small>${esc(p.label)}</small>` : ""}</span>`).join("")}</div>` : "";
+      const images = (dc.images || []).filter((im) => im.photoId || im.url).length
+        ? `<div class="dc-images">${dc.images.filter((im) => im.photoId || im.url).map((im) => `<figure class="dc-img reveal"><img src="${esc(photoSrc(im.photoId || im.url))}" alt="" loading="lazy">${im.caption ? `<figcaption>${esc(im.caption)}</figcaption>` : ""}</figure>`).join("")}</div>` : "";
       return `
       <section class="ch ch-dresscode" data-ch="dresscode">
         <div class="ch-inner">
-          <h2 class="inv-h2 reveal">${esc(dc.title || (theme.labels.dressCode || "Dress code"))}</h2>
-          ${dc.text ? `<p class="inv-p reveal">${esc(dc.text).replace(/\n/g, "<br>")}</p>` : ""}
+          ${h2(dc.title || word("dressCode"))}
+          ${dc.lead ? `<p class="sec-lead reveal">${esc(dc.lead)}</p>` : ""}
+          ${dc.text ? paragraphs(dc.text, "inv-p") : ""}
           ${palette}${images}
         </div>
       </section>`;
     },
 
-    gifts(data, theme) {
+    gifts(data) {
       const g = data.gifts;
       if (!g || !(g.text || (g.links || []).length)) return "";
       return `
       <section class="ch ch-gifts" data-ch="gifts">
         <div class="ch-inner">
           <div class="gf-icon reveal" aria-hidden="true">🎁</div>
-          <h2 class="inv-h2 reveal">${L(theme, "gifts", "Gifts")}</h2>
-          ${g.text ? `<p class="inv-p reveal">${esc(g.text).replace(/\n/g, "<br>")}</p>` : ""}
-          ${(g.links || []).length ? `<div class="inv-cta reveal">${g.links.map((l) => `<a class="inv-btn solid" href="${esc(l.url)}" target="_blank" rel="noopener">🎁 ${esc(l.label)} ↗</a>`).join("")}</div>` : ""}
-          ${g.details ? `<details class="gf-details reveal"><summary>${L(theme, "giftsDirect", "Prefer to contribute directly?")}</summary><p>${esc(g.details).replace(/\n/g, "<br>")}</p></details>` : ""}
+          ${h2(g.title || word("gifts"))}
+          ${g.text ? paragraphs(g.text, "inv-p") : ""}
+          ${(g.links || []).length ? `<div class="inv-cta reveal">${g.links.map((l) => button(l.url, "🎁 " + (l.label || "") + " ↗", null, "solid")).join("")}</div>` : ""}
+          ${g.details ? `<details class="gf-details reveal"><summary>${T("giftsDirect")}</summary><p>${esc(g.details).replace(/\n/g, "<br>")}</p></details>` : ""}
         </div>
       </section>`;
     },
 
     menu(data, theme) {
       const menu = (data.menu || []).filter((m) => m.name || m.description);
-      if (!menu.length) return "";
+      if (!menu.length && !data.menuText) return "";
       return `
       <section class="ch ch-menu" data-ch="menu">
         <div class="ch-inner">
           ${theme.art && theme.art.menuTop ? theme.art.menuTop : ""}
-          <h2 class="inv-h2 reveal">${L(theme, "menu", "Menu")}</h2>
-          <div class="menu-list">${menu.map((m) => `
+          ${h2(word("menu"))}
+          ${data.menuText ? paragraphs(data.menuText, "inv-p") : ""}
+          ${menu.length ? `<div class="menu-list">${menu.map((m) => `
             <div class="menu-item reveal">
               ${m.course ? `<span class="menu-course">— ${esc(m.course)} —</span>` : ""}
               ${m.name ? `<span class="menu-name">${esc(m.name)}</span>` : ""}
               ${m.description ? `<span class="menu-desc">${esc(m.description)}</span>` : ""}
-            </div>`).join("")}</div>
+            </div>`).join("")}</div>` : ""}
         </div>
       </section>`;
     },
 
-    accommodation(data, theme) {
+    accommodation(data) {
       const acc = (data.accommodation || []).filter((a) => a.name);
-      if (!acc.length) return "";
+      if (!acc.length && !data.accommodationText) return "";
       return `
       <section class="ch ch-accommodation" data-ch="accommodation">
         <div class="ch-inner">
-          <h2 class="inv-h2 reveal">${L(theme, "accommodation", "Accommodation")}</h2>
-          ${theme.labels.accommodationSub ? `<p class="inv-sub reveal">${esc(theme.labels.accommodationSub)}</p>` : ""}
-          <div class="acc-list">${acc.map((a) => `
+          ${h2(word("accommodation"))}
+          ${word("accommodationSub") ? `<p class="inv-sub reveal">${T("accommodationSub")}</p>` : ""}
+          ${data.accommodationText ? paragraphs(data.accommodationText, "inv-p") : ""}
+          ${acc.length ? `<div class="acc-list">${acc.map((a) => `
             <div class="acc-card reveal">
-              ${a.imageUrl ? `<img src="${esc(a.imageUrl)}" alt="" loading="lazy">` : ""}
+              ${safeUrl(a.imageUrl) ? `<img src="${esc(safeUrl(a.imageUrl))}" alt="" loading="lazy">` : ""}
               <div class="acc-body">
                 <b>${esc(a.name)}</b>
                 ${a.note ? `<p>${esc(a.note)}</p>` : ""}
                 ${a.price ? `<span class="acc-price">${esc(a.price)}</span>` : ""}
-                ${a.url ? `<a class="inv-btn ghost sm" href="${esc(a.url)}" target="_blank" rel="noopener">View details ↗</a>` : ""}
+                ${button(a.url, word("viewDetails"), null, "ghost sm")}
               </div>
-            </div>`).join("")}</div>
+            </div>`).join("")}</div>` : ""}
         </div>
       </section>`;
     },
 
-    faq(data, theme) {
+    faq(data) {
       const faq = (data.faq || []).filter((f) => f.q);
       if (!faq.length) return "";
       return `
       <section class="ch ch-faq" data-ch="faq">
         <div class="ch-inner">
           <div class="gf-icon reveal" aria-hidden="true">?</div>
-          <h2 class="inv-h2 reveal">${L(theme, "faq", "FAQ")}</h2>
+          ${h2(word("faq"))}
           <div class="faq-list">${faq.map((f) => `
             <details class="faq-item reveal"><summary>${esc(f.q)}</summary><p>${esc(f.a || "").replace(/\n/g, "<br>")}</p></details>`).join("")}</div>
         </div>
       </section>`;
     },
 
-    contact(data, theme) {
+    contact(data) {
       const c = data.contact;
       if (!c || !(c.text || c.name || c.phone || c.giftText)) return "";
+      const digits = String(c.phone || "").replace(/[^\d+]/g, "");
       return `
       <section class="ch ch-contact" data-ch="contact">
         <div class="ch-inner">
-          <h2 class="inv-h2 reveal">${L(theme, "contact", "Details")}</h2>
-          ${c.text ? `<p class="inv-p reveal">${esc(c.text)}</p>` : ""}
+          ${h2(c.title || word("contact"))}
+          ${c.text ? paragraphs(c.text, "inv-p") : ""}
           ${c.name ? `<p class="contact-name reveal">${esc(c.name)}</p>` : ""}
-          ${c.phone ? `<p class="contact-phone reveal"><a href="tel:${esc(c.phone.replace(/\s+/g, ""))}">${esc(c.phone)}</a></p>` : ""}
+          ${c.phone ? `<p class="contact-phone reveal"><a href="tel:${esc(digits)}">${esc(c.phone)}</a></p>` : ""}
+          ${c.whatsapp && digits ? `<div class="inv-cta reveal">${button("https://wa.me/" + digits.replace(/\D/g, ""), word("whatsapp"))}</div>` : ""}
           ${c.giftText ? `<p class="inv-p gift-note reveal">${esc(c.giftText)}</p>` : ""}
+        </div>
+      </section>`;
+    },
+
+    // Songs the hosts picked. Nothing is loaded from the music service until the guest asks for it.
+    music(data) {
+      const tracks = (data.music || []).filter((m) => m && trackId(m));
+      if (!tracks.length) return "";
+      return `
+      <section class="ch ch-music" data-ch="music">
+        <div class="ch-inner">
+          <div class="gf-icon reveal" aria-hidden="true">♪</div>
+          ${h2(word("music"))}
+          ${data.musicText ? paragraphs(data.musicText, "inv-p") : `<p class="inv-sub reveal">${T("musicHint")}</p>`}
+          <div class="music-list">${tracks.map((m) => `
+            <div class="music-card reveal" data-track="${esc(trackId(m))}">
+              <button class="music-play" type="button" aria-label="${T("listen")}: ${esc(m.title || "")}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+              </button>
+              <span class="music-meta"><b>${esc(m.title || "")}</b>${m.artist ? `<small>${esc(m.artist)}</small>` : ""}</span>
+            </div>`).join("")}</div>
+          <p class="music-note reveal">${T("playsOnSpotify")}</p>
+        </div>
+      </section>`;
+    },
+
+    // Free-form content: `sections[]` entries, used as "section:<key>".
+    // Each block may have a heading, text, short lines (names), buttons, and a style
+    // ("signature" or "quote").
+    section(data, theme, opts, arg) {
+      const list = data.sections || [];
+      const s = list.find((x) => x.key === arg) || list[parseInt(arg, 10)];
+      if (!s) return "";
+      const blocks = (s.blocks || []).map((b) => `
+        <div class="sec-block ${b.style ? "sb-" + esc(b.style) : ""}">
+          ${b.heading ? `<h3 class="sec-h3 reveal">${esc(b.heading)}</h3>` : ""}
+          ${b.text ? paragraphs(b.text, "inv-p") : ""}
+          ${(b.lines || []).length ? `<ul class="sec-lines">${b.lines.map((l) => `<li class="reveal">${esc(l)}</li>`).join("")}</ul>` : ""}
+          ${(b.buttons || []).length ? `<div class="inv-cta reveal">${b.buttons.map((x) => button(x.url, x.label, x.sub)).join("")}</div>` : ""}
+        </div>`).join("");
+      const key = String(s.key || arg || "").replace(/[^a-z0-9-]/gi, "");
+      const art = theme.art && theme.art.section ? theme.art.section(s) : "";
+      return `
+      <section class="ch ch-section sec-${key}" data-ch="section" data-key="${key}">
+        <div class="ch-inner">
+          ${art}
+          ${s.icon ? `<div class="gf-icon reveal" aria-hidden="true">${esc(s.icon)}</div>` : ""}
+          ${s.title ? `${h2(s.title)}` : ""}
+          ${s.lead ? `<p class="sec-lead reveal">${esc(s.lead)}</p>` : ""}
+          ${blocks}
         </div>
       </section>`;
     },
@@ -499,52 +648,57 @@
       if (opts.noRsvp) return "";
       const qs = (data.questions || []).map((q, i) => {
         const opt = (q.options || []).filter(Boolean);
+        const label = esc(q.label);
+        if (q.perGuest && opt.length) {
+          return `<div class="rf-field rf-yes"><span>${label}</span>
+            <div class="rf-perguest" data-q="${i}" data-options="${esc(JSON.stringify(opt))}"></div></div>`;
+        }
         if (q.type === "choice" && opt.length) {
-          return `<label class="rf-field"><span>${esc(q.label)}</span>
+          return `<label class="rf-field rf-yes"><span>${label}</span>
             <select data-q="${i}">${opt.map((o) => `<option>${esc(o)}</option>`).join("")}</select></label>`;
         }
         if (q.type === "multi" && opt.length) {
-          return `<div class="rf-field"><span>${esc(q.label)}</span>
+          return `<div class="rf-field rf-yes"><span>${label}</span>
             <div class="rf-multi" data-q="${i}">${opt.map((o) => `<label><input type="checkbox" value="${esc(o)}"><i></i>${esc(o)}</label>`).join("")}</div></div>`;
         }
         if (q.type === "radio" && opt.length) {
-          return `<div class="rf-field"><span>${esc(q.label)}</span>
+          return `<div class="rf-field rf-yes"><span>${label}</span>
             <div class="rf-radio" data-q="${i}">${opt.map((o, j) => `<label><input type="radio" name="q${i}" value="${esc(o)}" ${j ? "" : "checked"}><i></i>${esc(o)}</label>`).join("")}</div></div>`;
         }
-        return `<label class="rf-field"><span>${esc(q.label)}</span><input type="text" data-q="${i}" maxlength="200" placeholder="${esc(q.placeholder || "")}"></label>`;
+        return `<label class="rf-field rf-yes"><span>${label}</span><input type="text" data-q="${i}" maxlength="200" placeholder="${esc(q.placeholder || "")}"></label>`;
       }).join("");
-      const deadline = data.rsvpDeadline
-        ? `<p class="rf-deadline reveal">${L(theme, "replyBy", "Please reply by")} ${esc(fmtDate(data.rsvpDeadline, data.lang))}</p>` : "";
-      const guest = opts.guestName ? esc(opts.guestName) : "";
-      const couple = photoSrc(data.photo2Url || data.photo2Id);
+      const deadline = data.rsvpDeadlineText || (data.rsvpDeadline ? `${word("replyBy")} ${fmtDate(data.rsvpDeadline, true)}` : "");
+      const contacts = (data.rsvpContacts || []).filter((c) => c.name || c.phone).map((c) => {
+        const tel = String(c.phoneHref || c.phone || "").replace(/[^\d+]/g, "");
+        return `<li>${c.name ? `<b>${esc(c.name)}</b>` : ""}${c.phone ? `<a href="tel:${esc(tel)}">${esc(c.phone)}</a>` : ""}</li>`;
+      }).join("");
+      const couple = photoSrc(data.photo2Id || data.photo2Url);
       return `
       <section class="ch ch-rsvp" id="rsvp" data-ch="rsvp">
         <div class="ch-inner">
-          <h2 class="inv-h2 reveal">${L(theme, "rsvp", "RSVP")}</h2>
-          ${data.rsvpIntro ? `<p class="inv-p reveal">${esc(data.rsvpIntro)}</p>` : ""}
-          ${deadline}
+          ${h2(word("rsvp"))}
+          ${data.rsvpIntro ? paragraphs(data.rsvpIntro, "inv-p") : ""}
+          ${deadline ? `<p class="rf-deadline reveal">${esc(deadline)}</p>` : ""}
+          ${contacts ? `<ul class="rf-contacts reveal">${contacts}</ul>` : ""}
           <form class="rf reveal" novalidate>
-            <label class="rf-field"><span>${L(theme, "yourName", "Your name")}</span><input type="text" name="guest_name" required maxlength="120" value="${guest}"></label>
-            ${data.collectEmail ? `<label class="rf-field"><span>Email</span><input type="email" name="email" maxlength="160" placeholder="your@email.com"></label>` : ""}
-            <div class="rf-field"><span>${L(theme, "willAttend", "Will you attend?")}</span>
+            <label class="rf-field"><span>${T("yourName")}</span><input type="text" name="guest_name" required maxlength="120" value="${esc(opts.guestName || "")}"></label>
+            ${data.collectEmail ? `<label class="rf-field"><span>${T("email")}</span><input type="email" name="email" maxlength="160" placeholder="${T("emailPlaceholder")}"></label>` : ""}
+            <div class="rf-field"><span>${T("willAttend")}</span>
               <div class="rf-attend" role="radiogroup">
-                <label><input type="radio" name="attending" value="yes" checked><i></i>${L(theme, "yes", "Joyfully accepts")}</label>
-                <label><input type="radio" name="attending" value="no"><i></i>${L(theme, "no", "Regretfully declines")}</label>
+                <label><input type="radio" name="attending" value="yes" checked><i></i>${T("yes")}</label>
+                <label><input type="radio" name="attending" value="no"><i></i>${T("no")}</label>
               </div></div>
-            <div class="rf-field"><span>${L(theme, "guests", "Number of guests (including you)")}</span>
-              <div class="rf-step"><button type="button" data-d="-1" aria-label="Fewer">−</button><input type="number" name="party_size" min="1" max="20" value="1"><button type="button" data-d="1" aria-label="More">+</button></div></div>
+            <div class="rf-field rf-yes"><span>${T("guests")}</span>
+              <div class="rf-step"><button type="button" data-d="-1" aria-label="${T("fewer")}">−</button><input type="number" name="party_size" min="1" max="20" value="1"><button type="button" data-d="1" aria-label="${T("more")}">+</button></div></div>
             ${qs}
-            <label class="rf-field"><span>${L(theme, "message", "Message to the hosts (optional)")}</span>
+            <label class="rf-field"><span>${T("message")}</span>
               <textarea name="message" rows="2" maxlength="1000"></textarea></label>
-            <button type="submit" class="rf-send">${L(theme, "send", "Send RSVP")}</button>
+            <button type="submit" class="rf-send">${T("send")}</button>
             <p class="rf-status" aria-live="polite"></p>
           </form>
           ${data.closingText ? `<p class="rf-closing reveal">${esc(data.closingText)}</p>` : ""}
-          ${data.hosts ? `<p class="rf-hosts reveal">${L(theme, "hostedBy", "")} ${esc(data.hosts)}</p>` : ""}
+          ${data.hosts && !data.hideRsvpHosts ? `<p class="rf-hosts reveal">${T("hostedBy")} ${esc(data.hosts)}</p>` : ""}
           ${couple ? `<figure class="rf-couple reveal"><img src="${esc(couple)}" alt="" loading="lazy"></figure>` : ""}
-          <footer class="inv-foot">
-            <a class="inv-fira" href="${opts.brandHref || "index.html"}" target="_blank" rel="noopener">Made with Fira</a>
-          </footer>
         </div>
       </section>`;
     },
@@ -552,55 +706,98 @@
 
   const DEFAULT_ORDER = ["hero", "photo", "message", "details", "schedule", "rsvp"];
 
+  function trackId(m) {
+    const match = /track[/:]([A-Za-z0-9]{10,40})/.exec(String(m.spotify || ""));
+    return match ? match[1] : "";
+  }
+
+  // ---------- music: the official player, loaded when the guest asks for it ----------
+  function wireMusic(root) {
+    root.querySelectorAll(".music-card").forEach((card) => {
+      card.querySelector(".music-play").addEventListener("click", () => {
+        if (card.classList.contains("is-open")) return;
+        root.querySelectorAll(".music-card.is-open").forEach((other) => {   // one song at a time
+          other.classList.remove("is-open");
+          const frame = other.querySelector("iframe");
+          if (frame) frame.remove();
+        });
+        card.classList.add("is-open");
+        const frame = document.createElement("iframe");
+        frame.className = "music-frame";
+        frame.title = card.querySelector(".music-meta b").textContent;
+        frame.loading = "eager";
+        frame.allow = "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
+        frame.src = "https://open.spotify.com/embed/track/" + encodeURIComponent(card.dataset.track) + "?utm_source=fira";
+        card.appendChild(frame);
+      });
+    });
+  }
+
+  // ---------- RSVP ----------
   function wireRsvp(root, data, opts, theme) {
     const form = root.querySelector(".rf");
     if (!form) return;
+    const size = () => Math.min(20, Math.max(1, parseInt(form.party_size.value || "1", 10) || 1));
+
+    function perGuest() {   // one choice per guest, kept in step with the number of guests
+      form.querySelectorAll(".rf-perguest").forEach((box) => {
+        const options = JSON.parse(box.dataset.options);
+        const chosen = [...box.querySelectorAll("select")].map((s) => s.value);
+        const n = size();
+        box.innerHTML = Array.from({ length: n }, (_, i) => `
+          <label class="rf-guest">${n > 1 ? `<small>${esc(word("guestN").replace("{n}", i + 1))}</small>` : ""}
+            <select>${options.map((o) => `<option ${chosen[i] === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`).join("");
+      });
+    }
     form.querySelectorAll(".rf-step button").forEach((b) => b.addEventListener("click", () => {
-      const inp = form.party_size;
-      inp.value = Math.min(20, Math.max(1, (parseInt(inp.value || "1", 10) || 1) + parseInt(b.dataset.d, 10)));
+      form.party_size.value = Math.min(20, Math.max(1, size() + parseInt(b.dataset.d, 10)));
+      perGuest();
     }));
+    form.party_size.addEventListener("input", perGuest);
+    form.querySelectorAll("input[name=attending]").forEach((r) => r.addEventListener("change", () =>
+      form.classList.toggle("is-no", form.attending.value === "no")));
+    perGuest();
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const status = form.querySelector(".rf-status");
       const name = form.guest_name.value.trim();
-      if (!name) { status.textContent = "Please enter your name."; return; }
-      const answers = {};
-      if (form.email && form.email.value.trim()) answers["Email"] = form.email.value.trim();
-      (data.questions || []).forEach((q, i) => {
-        const multi = form.querySelector(`.rf-multi[data-q="${i}"]`);
-        const radio = form.querySelector(`.rf-radio[data-q="${i}"]`);
-        if (multi) {
-          const v = [...multi.querySelectorAll("input:checked")].map((c) => c.value);
-          if (v.length) answers[q.label] = v.join(", ");
-        } else if (radio) {
-          const r = radio.querySelector("input:checked");
-          if (r) answers[q.label] = r.value;
-        } else {
-          const el = form.querySelector(`[data-q="${i}"]`);
-          if (el && el.value) answers[q.label] = el.value;
-        }
-      });
+      if (!name) { status.textContent = word("nameMissing"); return; }
       const yes = form.attending.value === "yes";
+      const answers = {};
+      if (form.email && form.email.value.trim()) answers[word("email")] = form.email.value.trim();
+      if (yes) {
+        (data.questions || []).forEach((q, i) => {
+          const multi = form.querySelector(`.rf-multi[data-q="${i}"]`);
+          const radio = form.querySelector(`.rf-radio[data-q="${i}"]`);
+          const each = form.querySelector(`.rf-perguest[data-q="${i}"]`);
+          let value = "";
+          if (each) value = [...each.querySelectorAll("select")].map((s) => s.value).join(", ");
+          else if (multi) value = [...multi.querySelectorAll("input:checked")].map((c) => c.value).join(", ");
+          else if (radio) value = (radio.querySelector("input:checked") || {}).value || "";
+          else value = (form.querySelector(`[data-q="${i}"]`) || {}).value || "";
+          if (value) answers[q.label] = value;
+        });
+      }
       const btn = form.querySelector(".rf-send");
       btn.disabled = true;
-      status.textContent = "Sending…";
+      status.textContent = word("sending");
       try {
-        if (!opts.inviteId) throw new Error("This is a preview — publish to enable RSVP.");
+        if (!opts.inviteId) throw new Error(word("previewOnly"));
         await window.FiraAPI.sendRsvp(opts.inviteId, {
           guest_name: name,
           attending: form.attending.value,
-          party_size: Math.max(1, parseInt(form.party_size.value || "1", 10)),
+          party_size: yes ? size() : 1,
           answers,
           message: form.message.value.trim(),
         });
         const r = btn.getBoundingClientRect();
-        form.innerHTML = yes
-          ? `<p class="rf-done">${L(theme, "thanksYes", "See you there,")} ${esc(name)}! ✦</p>`
-          : `<p class="rf-done">${L(theme, "thanksNo", "Thank you for letting us know,")} ${esc(name)}.</p>`;
-        document.querySelector(".cta-pill")?.remove();
+        form.innerHTML = `<p class="rf-done">${T(yes ? "thanksYes" : "thanksNo")} ${esc(name)}${yes ? "! ✦" : "."}</p>`;
+        const pill = document.querySelector(".cta-pill");
+        if (pill) pill.remove();
         if (yes) celebrate(theme.swatch.concat(["#FFFFFF"]), { x: r.left + r.width / 2, y: r.top });
       } catch (err) {
-        status.textContent = err.message || "Could not send. Try again.";
+        status.textContent = (err && err.message) || word("sendFailed");
         btn.disabled = false;
       }
     });
@@ -609,6 +806,15 @@
   // ======================================================================
   // Envelopes
   // ======================================================================
+  // "Alma & Theo" -> "A·T"; an explicit sealText wins.
+  function monogram(data) {
+    if (data.sealText) return String(data.sealText).slice(0, 3);
+    const t = (data.title || "").trim();
+    const parts = t.split(/\s*(?:&|\+|\band\b|\boch\b)\s*/i).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + "·" + parts[1][0]).toUpperCase();
+    return (t[0] || "F").toUpperCase();
+  }
+
   function sealSvg(initials) {
     return `
     <svg viewBox="0 0 120 120" class="seal-svg" aria-hidden="true">
@@ -622,7 +828,11 @@
     </svg>`;
   }
 
-  // Shared sound state — the opening film now, ambient loops later.
+  const address = (data, opts) => (opts.guestName
+    ? `${T("for")} ${esc(opts.guestName)}`
+    : esc(data.envelopeTeaser || word("teaser")));
+
+  // Sound of the opening film (and of anything else that registers itself).
   const soundState = {
     on: false, media: [], btn: null,
     set(v) { this.on = v; this.media.forEach((m) => (m.muted = !v)); if (this.btn) this.btn.classList.toggle("on", v); },
@@ -632,7 +842,7 @@
   function soundToggle(stage) {
     const b = document.createElement("button");
     b.className = "snd-toggle" + (soundState.on ? " on" : "");
-    b.setAttribute("aria-label", "Toggle sound");
+    b.setAttribute("aria-label", word("toggleSound"));
     b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M11 5L6 9H3v6h3l5 4V5z"/><path class="w1" d="M15.5 8.5a5 5 0 010 7"/><path class="w2" d="M18.5 5.5a9 9 0 010 13"/><path class="x" d="M16 9l5 6M21 9l-5 6"/></svg>`;
     b.addEventListener("click", () => soundState.set(!soundState.on));
@@ -640,25 +850,22 @@
     stage.appendChild(b);
   }
 
-  // The video IS the envelope: poster = frame 0, tap = unmuted play.
+  // The film IS the envelope: its first frame is the sealed envelope, a tap plays it with sound.
   function filmEnvelope(mount, data, theme, opts, onOpen) {
     const o = theme.opening;
-    const addr = opts.guestName
-      ? `${L(theme, "for", "For")} ${esc(opts.guestName)}`
-      : esc(data.envelopeTeaser || theme.labels.teaser || "You are invited");
     const sp = o.sealPos || { x: 50, y: 50 };
     const mono = o.monogram === false ? "" :
-      `<div class="env4-mono" style="left:${sp.x}%;top:${sp.y}%;--seal-w:${o.sealSize || 24}vw">${esc(monogram(data))}</div>`;
+      `<div class="env4-mono" style="left:${Number(sp.x) || 50}%;top:${Number(sp.y) || 50}%;--seal-w:${Number(o.sealSize) || 24}vw">${esc(monogram(data))}</div>`;
     const env = document.createElement("div");
     env.className = "env4";
     env.innerHTML = `
       <video class="env4-film" poster="${esc(o.poster)}" preload="auto" playsinline muted></video>
       <div class="env4-scrim"></div>
-      <p class="env4-addr">${addr}</p>
+      <p class="env4-addr">${address(data, opts)}</p>
       ${mono}
-      <p class="env4-sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>${L(theme, "soundHint", "Turn your sound on")}</p>
-      <p class="env4-hint">${L(theme, "tapToOpen", "Tap to open")}</p>
-      <button class="env4-tap" aria-label="Open the invitation"></button>`;
+      <p class="env4-sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>${T("soundHint")}</p>
+      <p class="env4-hint">${T("tapToOpen")}</p>
+      <button class="env4-tap" aria-label="${T("openInvitation")}"></button>`;
     mount.appendChild(env);
     const film = env.querySelector(".env4-film");
     film.src = o.video;
@@ -690,12 +897,9 @@
     return env;
   }
 
-  // Coded envelope (themes without a generated film).
+  // Coded envelope, for themes without a film.
   function envelope(mount, data, theme, opts, onOpen) {
     const initials = monogram(data);
-    const addr = opts.guestName
-      ? `For ${esc(opts.guestName)}`
-      : esc(data.envelopeTeaser || theme.labels.teaser || "You are invited");
     const env = document.createElement("div");
     env.className = "env3";
     env.innerHTML = `
@@ -703,55 +907,26 @@
         <div class="env3-grain"></div>
         <div class="env3-border"></div>
         <div class="env3-flap"><div class="env3-flap-inner"></div></div>
-        <p class="env3-addr">${addr}</p>
+        <p class="env3-addr">${address(data, opts)}</p>
         <div class="env3-sealwrap">
-          <button class="env3-seal" aria-label="Break the seal and open the invitation">${sealSvg(initials)}</button>
+          <button class="env3-seal" aria-label="${T("openInvitation")}">${sealSvg(initials)}</button>
           <div class="env3-half l" aria-hidden="true">${sealSvg(initials)}</div>
           <div class="env3-half r" aria-hidden="true">${sealSvg(initials)}</div>
         </div>
-        <p class="env3-hint">Tap the seal to open</p>
+        <p class="env3-hint">${T("tapSeal")}</p>
       </div>`;
     mount.appendChild(env);
-    let film = null;
-    if (theme.openingVideo && !opts.noFilm) {
-      film = document.createElement("video");
-      film.className = "env3-film";
-      film.muted = true; film.playsInline = true; film.preload = "auto";
-      film.setAttribute("muted", ""); film.setAttribute("playsinline", "");
-      film.src = theme.openingVideo;
-      env.appendChild(film);
-    }
-    const filmReady = () => film && film.readyState >= 3 && !film.error;
     let opened = false;
-    const cssSequence = () => {
-      setTimeout(() => env.classList.add("cracked"), 260);
-      setTimeout(() => env.classList.add("unfolding"), 760);
-      setTimeout(() => { env.classList.add("lifting"); onOpen(); }, 1500);
-      setTimeout(() => env.remove(), 2600);
-    };
-    const filmSequence = () => {
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        env.classList.add("lifting"); onOpen();
-        setTimeout(() => env.remove(), 1100);
-      };
-      setTimeout(() => {
-        env.classList.add("filming");
-        film.play().catch(() => { env.classList.remove("filming"); cssSequence(); });
-        film.addEventListener("ended", finish);
-        film.addEventListener("error", finish);
-        setTimeout(finish, 9000);
-      }, 220);
-    };
     const open = () => {
       if (opened) return;
       opened = true;
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
       if (!opts.noFullscreen) tryFullscreen();
       env.classList.add("sealing");
-      if (filmReady()) filmSequence(); else cssSequence();
+      setTimeout(() => env.classList.add("cracked"), 260);
+      setTimeout(() => env.classList.add("unfolding"), 760);
+      setTimeout(() => { env.classList.add("lifting"); onOpen(); }, 1500);
+      setTimeout(() => env.remove(), 2600);
     };
     env.querySelector(".env3-seal").addEventListener("click", (e) => { e.stopPropagation(); open(); });
     env.addEventListener("click", open);
@@ -760,14 +935,16 @@
 
   // ======================================================================
   // render(data, mount, opts)
-  // opts: { inviteId, skipEnvelope, noRsvp, brandHref, guestName, noFullscreen, noFilm }
+  // opts: { inviteId, skipEnvelope, noRsvp, guestName, noFullscreen, noFilm, startMuted }
   // ======================================================================
   function render(data, mount, opts = {}) {
     const theme = window.FIRA_TEMPLATES[data.template] || window.FIRA_TEMPLATES.botanical;
+    buildLabels(data, theme);
     mount.innerHTML = "";
     document.querySelectorAll(".cta-pill, .fs-toggle, .snd-toggle, .celebrate-canvas").forEach((el) => el.remove());
     soundState.reset();
     mount.className = "inv-root theme-" + theme.id;
+    document.documentElement.lang = LBL._lang;
     if (theme.fonts && !document.getElementById("f-" + theme.id)) {
       const l = document.createElement("link");
       l.id = "f-" + theme.id; l.rel = "stylesheet"; l.href = theme.fonts;
@@ -787,15 +964,20 @@
       parallax(stage);
       const wrap = document.createElement("div");
       wrap.className = "story";
-      const order = theme.chapters || DEFAULT_ORDER;
+      const order = (Array.isArray(data.chapters) && data.chapters.length ? data.chapters : theme.chapters) || DEFAULT_ORDER;
       wrap.innerHTML = `
         ${theme.storyBg ? `<div class="story-bg" aria-hidden="true"><img src="${esc(theme.storyBg)}" alt=""></div>` : ""}
         <div class="story-progress" aria-hidden="true"><i></i></div>
-        ${order.map((k) => CH[k] ? CH[k](data, theme, opts) : "").join("")}`;
+        ${order.map((name) => {
+          const [kind, arg] = String(name).split(":");
+          return CH[kind] ? CH[kind](data, theme, opts, arg) : "";
+        }).join("")}
+        <footer class="story-foot"><a class="inv-fira" href="index.html" target="_blank" rel="noopener">${T("madeWith")}</a></footer>`;
       stage.appendChild(wrap);
       wrap.querySelectorAll(".ch:not(.ch-hero)").forEach((ch, i) => ch.classList.add(i % 2 ? "band-b" : "band-a"));
-      wrap.querySelectorAll(".inv-countdown").forEach((el) => countdown(el, data.date, data.time));
+      wrap.querySelectorAll(".inv-countdown").forEach((el) => countdown(el, data));
       wireRsvp(wrap, data, opts, theme);
+      wireMusic(wrap);
       revealOnScroll(wrap);
       storyEngine(wrap);
       if (theme.after) theme.after(wrap, data, opts, U);
@@ -804,8 +986,8 @@
         const pill = document.createElement("button");
         pill.className = "cta-pill" + (theme.ctaStyle === "scroll" ? " cta-scroll" : "");
         pill.innerHTML = theme.ctaStyle === "scroll"
-          ? `<span>${L(theme, "cta", "Scroll to RSVP")}</span><i class="mouse" aria-hidden="true"></i>`
-          : esc(theme.labels.cta || "Confirm attendance");
+          ? `<span>${T("cta")}</span><i class="mouse" aria-hidden="true"></i>`
+          : T("cta");
         pill.addEventListener("click", () => glideTo(wrap.querySelector("#rsvp")));
         stage.appendChild(pill);
         setTimeout(() => pill.classList.add("show"), 2400);
@@ -817,7 +999,7 @@
       if (!opts.skipEnvelope && !opts.noFullscreen) {
         const fs = document.createElement("button");
         fs.className = "fs-toggle";
-        fs.setAttribute("aria-label", "Toggle fullscreen");
+        fs.setAttribute("aria-label", word("toggleFullscreen"));
         fs.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>`;
         fs.addEventListener("click", () => (isFullscreen() ? exitFullscreen() : tryFullscreen()));
         stage.appendChild(fs);
@@ -833,6 +1015,6 @@
     }
   }
 
-  const U = { esc, fmtDate, icsHref, particles, celebrate, parallax, countdown, photoSrc, reduced: REDUCED };
-  window.FiraInvite = { render, esc, fmtDate, chapters: CH };
+  const U = { esc, fmtDate, icsHref, particles, celebrate, parallax, countdown, photoSrc, safeUrl, word, reduced: REDUCED };
+  window.FiraInvite = { render, esc, fmtDate, chapters: CH, eventInstant, safeUrl };
 })();

@@ -42,6 +42,8 @@
 
     <div class="ed-section">
       <h2>The essentials</h2>
+      <div class="ed-field"><label>Language your guests read</label>
+        <select id="f_lang"><option value="en">English</option><option value="sv">Svenska</option></select></div>
       <div class="ed-field"><label>Occasion line</label><input id="f_eventType" placeholder="Wedding Day · Birthday party · …"></div>
       <div class="ed-field"><label>Main title (names / headline)</label><input id="f_title" placeholder="Sofia & Marcus"></div>
       <div class="ed-field"><label>Subtitle</label><input id="f_subtitle" placeholder="are getting married"></div>
@@ -135,7 +137,7 @@
       <label style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-soft)">Extra questions</label>
       <div id="qList" style="margin-top:8px"></div>
       <button class="ed-add" id="qAdd" type="button">+ Add a question</button>
-      <p class="ed-hint" style="margin-top:8px">Options comma-separated. Type: text · single choice · multiple choice · radio.</p>
+      <p class="ed-hint" style="margin-top:8px">Options comma-separated. "One choice per guest" asks once for every guest in the party, which is what a caterer needs.</p>
       <div class="ed-field">
         <label>Second photo (shown after the RSVP form)</label>
         <div class="ed-photo-row" style="grid-template-columns:56px 1fr"><div class="thumb" id="ph_second">+ add</div><span class="ed-hint" style="margin:0">Optional — a photo of you two.</span></div>
@@ -173,6 +175,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/templates.js"></script>
 <script>
 (function () {
@@ -199,7 +202,7 @@
   const clean = (arr, key) => arr.filter((x) => (x[key] || "").trim());
 
   function collect() {
-    const d = Object.assign({}, base, { template: currentTpl });
+    const d = Object.assign({}, base, { template: currentTpl, lang: $("f_lang").value });
     ["eventType","title","subtitle","date","time","venue","address","mapUrl","songUrl","hosts","sealText","envelopeTeaser",
      "messageTitle","message","rsvpDeadline","rsvpIntro","closingText"].forEach((f) => { d[f] = val(f); });
     if (photoId) d.photoId = photoId; else delete d.photoId;
@@ -218,8 +221,9 @@
     d.contact = (c.text || c.name || c.phone || c.giftText) ? c : undefined;
     d.questions = clean(st.questions, "label").map((q) => {
       const opts = (q.optionsRaw || "").split(",").map((s) => s.trim()).filter(Boolean);
-      const type = q.type === "text" || !opts.length ? "text" : q.type;
-      return Object.assign({ type, label: q.label }, type !== "text" ? { options: opts } : {}, q.placeholder ? { placeholder: q.placeholder } : {});
+      const each = q.type === "each" && opts.length > 0;
+      const type = each ? "choice" : (q.type === "text" || !opts.length ? "text" : q.type);
+      return Object.assign({ type, label: q.label }, type !== "text" ? { options: opts } : {}, each ? { perGuest: true } : {}, q.placeholder ? { placeholder: q.placeholder } : {});
     });
     Object.keys(d).forEach((k) => d[k] === undefined && delete d[k]);
     return d;
@@ -232,6 +236,7 @@
     ["eventType","title","subtitle","date","time","venue","address","mapUrl","songUrl","hosts","sealText","envelopeTeaser",
      "messageTitle","message","rsvpDeadline","rsvpIntro","closingText"].forEach((f) => { $("f_" + f).value = data[f] || ""; });
     photoId = data.photoId || null; photo2Id = data.photo2Id || null;
+    $("f_lang").value = (window.FIRA_I18N || {})[data.lang] ? data.lang : "en";
     $("f_collectEmail").checked = !!data.collectEmail;
     st.schedule = (data.schedule || []).map((s) => ({ time: s.time || "", icon: s.icon || "", label: s.label || "", note: s.note || "" }));
     const dc = data.dressCode || {};
@@ -245,7 +250,7 @@
     st.faq = (data.faq || []).map((f) => ({ q: f.q || "", a: f.a || "" }));
     const c = data.contact || {};
     $("f_contactText").value = c.text || ""; $("f_contactName").value = c.name || ""; $("f_contactPhone").value = c.phone || ""; $("f_contactGift").value = c.giftText || "";
-    st.questions = (data.questions || []).map((q) => ({ label: q.label || "", optionsRaw: (q.options || []).join(", "), type: q.type || "text", placeholder: q.placeholder || "" }));
+    st.questions = (data.questions || []).map((q) => ({ label: q.label || "", optionsRaw: (q.options || []).join(", "), type: q.perGuest ? "each" : (q.type || "text"), placeholder: q.placeholder || "" }));
     renderTplPicker(); renderAll(); updatePhotoThumbs();
   }
 
@@ -259,7 +264,7 @@
     doc.write(`<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
       <link rel="stylesheet" href="css/invite.css"><style>body{margin:0}<\/style></head><body><div id="m"></div>
       <script src="js/config.js"><\/script><script src="js/api.js"><\/script>
-      <script src="js/templates.js"><\/script><script src="js/invite-core.js"><\/script>
+      <script src="js/i18n.js"><\/script><script src="js/templates.js"><\/script><script src="js/invite-core.js"><\/script>
       <script>window.addEventListener("message",function(e){
         if(!e.data||e.data.type!=="fira-preview")return;
         FiraInvite.render(e.data.data, document.getElementById("m"), {skipEnvelope:!e.data.envelope, noRsvp:false, inviteId:null, noFullscreen:true});
@@ -277,6 +282,7 @@
   $("replayBtn").addEventListener("click", () => { initFrame(); pendingEnvelope = true; });
   fields.forEach((f) => $("f_" + f).addEventListener("input", schedulePush));
   $("f_collectEmail").addEventListener("change", schedulePush);
+  $("f_lang").addEventListener("change", schedulePush);
 
   // ---------- theme picker ----------
   function renderTplPicker() {
@@ -346,7 +352,7 @@
     () => ({ q: "", a: "" }));
   const renderQs = listEditor("qList", "qAdd", () => st.questions,
     [{ key: "label", placeholder: "Question" }, { key: "optionsRaw", placeholder: "Options, comma-separated" },
-     { key: "type", type: "select", w: "110px", options: [["text", "Text"], ["choice", "Single choice"], ["multi", "Multiple choice"], ["radio", "Radio"]] }],
+     { key: "type", type: "select", w: "110px", options: [["text", "Text"], ["choice", "Single choice"], ["each", "One choice per guest"], ["multi", "Multiple choice"], ["radio", "Radio"]] }],
     () => ({ label: "", optionsRaw: "", type: "text" }));
 
   // ---------- photos ----------

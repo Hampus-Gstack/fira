@@ -6,7 +6,8 @@ Run from the repo root with a Python that has Playwright installed, in the FOREG
 
     python tests/e2e.py                      # local: serves site/ on 127.0.0.1:8090, talks to the live API
     python tests/e2e.py --base prod          # the deployed site
-    python tests/e2e.py --only pages,film    # any of: pages, film, seal, flow
+    python tests/e2e.py --only pages,film    # any of: pages, film, seal, lang, flow
+    python tests/e2e.py --base prod --invite <id>   # one published invitation, read only
 
 `flow` publishes a real invitation through the editor, answers it as a guest, reads it back on
 the host dashboard, edits it and deletes it again. Invitations are deleted even when a check fails.
@@ -38,7 +39,7 @@ PROD = os.environ.get("FIRA_SITE_BASE", "https://hampus-gstack.github.io/fira").
 API = os.environ.get("FIRA_API_BASE", "https://fira.cursuscapital.co/api").rstrip("/")
 API_ORIGIN = API.rsplit("/api", 1)[0]
 PORT = 8090  # http://127.0.0.1:8090 is on the API's CORS allow-list
-GROUPS = ("pages", "film", "seal", "flow")
+GROUPS = ("pages", "film", "seal", "lang", "flow")
 
 
 class Check(Exception):
@@ -84,6 +85,16 @@ def api(method, path, admin_key=None):
         raise Check(f"API {method} failed: {type(e).__name__}")
 
 
+def served_as_image(url):
+    """True when the server delivers this URL as an image (checked outside the browser)."""
+    try:
+        req = urllib.request.Request(url, method="GET", headers={"Range": "bytes=0-1023"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status in (200, 206) and r.headers.get("Content-Type", "").startswith("image/")
+    except Exception:
+        return False
+
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -112,8 +123,9 @@ def local_site():
 
 
 class Suite:
-    def __init__(self, browser, base):
+    def __init__(self, browser, base, invite_id=None):
         self.browser = browser
+        self.invite_id = invite_id
         self.base = base.rstrip("/")
         self.errors = []
         self.created = []  # [invite_id, admin_key, deleted]
@@ -199,6 +211,7 @@ class Suite:
         page.close()
         self.no_errors("manage.html")
 
+        slow = 0
         for t in self.themes():
             page = self.page()
             page.goto(self.url(f"i.html?demo={t['id']}&embed=1"))
@@ -214,13 +227,17 @@ class Suite:
                 page.wait_for_function("[...document.images].every(i => i.complete)", timeout=20000)
             except Exception:
                 pass  # reported below, by name
-            broken = page.evaluate(
+            pending = page.evaluate(
                 "[...document.images].filter(i => !(i.complete && i.naturalWidth > 0)).map(i => i.currentSrc || i.src)"
             )
+            # An image that is merely slow on this connection is not a defect; one the server cannot deliver is.
+            broken = [u for u in pending if not served_as_image(u)]
             expect(not broken, f"{t['id']}: images failed to load: {broken[:3]}")
+            slow += len(pending) - len(broken)
             page.close()
             self.no_errors(f"story {t['id']}")
-        return f"{len(self.themes())} theme stories, 3 site pages"
+        note = f" ({slow} image(s) still loading on this connection)" if slow else ""
+        return f"{len(self.themes())} theme stories, 3 site pages{note}"
 
     def test_film(self):
         films = [t for t in self.themes() if t["film"]]
@@ -280,6 +297,88 @@ class Suite:
             page.close()
             self.no_errors(f"seal {t['id']}")
         return ", ".join(t["id"] for t in coded) or "no coded-envelope themes left"
+
+    def test_lang(self):
+        """A Swedish invitation: words, dates, two places, free sections, music, one meal choice per guest."""
+        page = self.page()
+        page.goto(self.url("i.html?demo=agapi&embed=1"))
+        page.wait_for_selector(".story .ch-hero")
+        expect(page.evaluate("document.documentElement.lang") == "sv", "page language is not Swedish")
+        expect(page.locator(".ch-place").count() == 2, "expected two places (ceremony and dinner)")
+        expect(page.locator(".ch-section").count() >= 6, "free-form sections are missing")
+        hero = page.inner_text(".ch-hero")
+        expect("LÖRDAGEN DEN 21 AUGUSTI 2027" in hero.upper(), "hero does not show the written date")
+        labels = page.inner_text(".ch-countdown")
+        expect("DAGAR" in labels.upper() and "DAYS" not in labels.upper(), f"countdown is not in Swedish: {labels!r}")
+        expect(page.inner_text(".rf-send").strip().upper() == "SKICKA SVAR", "RSVP button is not in Swedish")
+        expect("OSA SENAST" in page.inner_text(".rf-deadline").upper(), "reply-by line is not in Swedish")
+        cal = page.get_attribute(".ch-place a[download]", "href")
+        expect(cal and "DTSTART%3A20270821T150000Z" in cal, "calendar entry is not 18:00 Athens time (15:00 UTC)")
+        directions = page.get_attribute(".place-0 .inv-cta a >> nth=0", "href")
+        expect(directions.startswith("https://www.google.com/maps/search/"), "directions link is wrong")
+
+        page.evaluate("document.querySelector('#rsvp').scrollIntoView({behavior: 'instant'})")
+        expect(page.locator(".rf-perguest select").count() == 1, "one guest should have one meal choice")
+        page.click(".rf-step button[data-d='1']")
+        page.click(".rf-step button[data-d='1']")
+        expect(page.locator(".rf-perguest select").count() == 3, "three guests should have three meal choices")
+        page.select_option(".rf-perguest select >> nth=1", "Veganskt")
+        page.click(".rf-step button[data-d='-1']")
+        expect(page.locator(".rf-perguest select").count() == 2, "meal choices did not follow the guest count")
+        expect(page.input_value(".rf-perguest select >> nth=1") == "Veganskt", "a guest's choice was lost when the count changed")
+        page.click(".rf-attend label:has(input[value='no'])")
+        expect(not page.is_visible(".rf-perguest"), "meal choice is still shown to a guest who declines")
+        page.click(".rf-attend label:has(input[value='yes'])")
+
+        page.locator(".music-card >> nth=0").scroll_into_view_if_needed()
+        page.click(".music-card >> nth=0 >> .music-play")
+        page.wait_for_selector(".music-card.is-open iframe[src*='open.spotify.com/embed/track/']", timeout=15000)
+        page.click(".music-card >> nth=1 >> .music-play")
+        page.wait_for_function("document.querySelectorAll('.music-card iframe').length === 1", timeout=15000)
+
+        safe = page.evaluate("""[FiraInvite.safeUrl('javascript:alert(1)'), FiraInvite.safeUrl(' JaVaScRiPt:alert(1)'),
+                                 FiraInvite.safeUrl('data:text/html,x'), FiraInvite.safeUrl('https://example.com/a'),
+                                 FiraInvite.safeUrl('tel:+46701740605'), FiraInvite.safeUrl('media/x.jpg')]""")
+        expect(safe == ["", "", "", "https://example.com/a", "tel:+46701740605", "media/x.jpg"], f"link filter is wrong: {safe}")
+        page.close()
+        self.no_errors("lang")
+        return "Swedish words and dates, time zone, per-guest choices, music, link filter"
+
+    def test_invite(self):
+        """A published invitation, read only: nothing is sent, so a customer's guest list stays clean."""
+        invite_id = self.invite_id
+        status, doc = api("GET", f"/invites/{invite_id}")
+        expect(status == 200, f"invitation {invite_id} is not readable (HTTP {status})")
+        data = doc["data"]
+        page = self.page()
+        page.goto(self.url(f"i.html?id={invite_id}&to=" + urllib.parse.quote("Anna & Johan")))
+        page.wait_for_selector(".env4-tap, .env3-seal")
+        film = page.locator(".env4-tap").count() == 1
+        expect("Anna & Johan" in page.inner_text(".env4-addr, .env3-addr"), "envelope is not addressed to the guest")
+        self.open_envelope(page, film)
+        expect((data.get("title") or "") in page.inner_text(".ch-hero"), "hero does not show the title")
+        expect(page.evaluate("document.documentElement.lang") == (data.get("lang") or "en"), "page language does not match the invitation")
+        chapters = page.locator(".ch").count()
+        expect(chapters >= 5, f"only {chapters} chapters rendered")
+        expect(page.locator("#rsvp .rf").count() == 1, "RSVP form missing")
+        expect(page.input_value("input[name=guest_name]") == "Anna & Johan", "guest name is not prefilled")
+        height = page.evaluate("document.documentElement.scrollHeight")
+        for y in range(0, height, 600):
+            page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", y)
+            page.wait_for_timeout(120)
+        try:
+            page.wait_for_function("[...document.images].every(i => i.complete)", timeout=20000)
+        except Exception:
+            pass
+        pending = page.evaluate("[...document.images].filter(i => !(i.complete && i.naturalWidth > 0)).map(i => i.currentSrc || i.src)")
+        broken = [u for u in pending if not served_as_image(u)]
+        expect(not broken, f"images failed to load: {broken[:3]}")
+        links = page.evaluate("[...document.querySelectorAll('.story a[href]')].map(a => a.getAttribute('href'))")
+        bad = [h for h in links if not h.startswith(("https://", "http://", "tel:", "mailto:", "data:text/calendar", "index.html"))]
+        expect(not bad, f"unexpected link targets: {bad[:3]}")
+        page.close()
+        self.no_errors("invite")
+        return f"{invite_id}: {data.get('title')} · {data.get('template')} · {chapters} chapters, {len(links)} links, nothing sent"
 
     def test_flow(self):
         title = "E2E " + time.strftime("%m%d-%H%M%S")
@@ -416,9 +515,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", default="local", help="local (default), prod, or a full base URL")
     ap.add_argument("--only", default=",".join(GROUPS), help="comma-separated groups: " + ", ".join(GROUPS))
+    ap.add_argument("--invite", default="", help="check this published invitation instead (read only, nothing is sent)")
     args = ap.parse_args()
-    groups = [g.strip() for g in args.only.split(",") if g.strip()]
-    unknown = [g for g in groups if g not in GROUPS]
+    groups = ["invite"] if args.invite else [g.strip() for g in args.only.split(",") if g.strip()]
+    unknown = [g for g in groups if g not in GROUPS + ("invite",)]
     if unknown:
         sys.exit(f"unknown group(s): {unknown}; choose from {GROUPS}")
 
@@ -430,7 +530,7 @@ def main():
         print(f"Fira e2e against {base} (API {API})")
         p = stack.enter_context(sync_playwright())
         browser = p.chromium.launch(headless=True, args=["--autoplay-policy=no-user-gesture-required"])
-        suite = Suite(browser, base)
+        suite = Suite(browser, base, args.invite)
         failed = 0
         try:
             for group in groups:

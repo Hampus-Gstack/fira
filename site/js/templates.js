@@ -1,4 +1,4 @@
-// Fira theme registry v5 — identities + art hooks + generated assets.
+// Fira theme registry v6 — identities, wording, chapter order, art hooks, media.
 // The story mechanics live in invite-core. All artwork original.
 (function () {
   const G = "https://fonts.googleapis.com/css2?";
@@ -42,6 +42,127 @@
     <circle cx="100" cy="34" r="5" fill="currentColor"/>
   </svg>`;
 
+
+  // ---- Agápi: line art drawn in code -------------------------------------------------
+  // A church chandelier in line art: a crown on a chain, two tiers of candles on scrolled arms,
+  // and below them the wide ring of candles that hangs in Orthodox churches, held by chains,
+  // with pendants underneath. The strokes draw themselves, then the candles light tier by tier.
+  function chandelierArt() {
+    const cx = 160;
+    let arms = "", hubs = "", candles = "", flames = "", count = 0;
+    const candle = (x, cup, tier) => {
+      candles += `<rect x="${(x - 2.4).toFixed(1)}" y="${(cup - 20).toFixed(1)}" width="4.8" height="20" rx="1"/>`;
+      flames += `<path class="flame" style="--t:${tier};--d:${((count++ * 0.37) % 1.9).toFixed(2)}s" d="M${x.toFixed(1)},${(cup - 33).toFixed(1)} c3.6,4.8 4.2,7.8 0,11.4 c-4.2,-3.6 -3.6,-6.6 0,-11.4 z"/>`;
+    };
+    [{ y: 128, reach: 50, n: 2 }, { y: 180, reach: 92, n: 3 }].forEach((t, ti) => {
+      hubs += `<ellipse cx="${cx}" cy="${t.y}" rx="${9 + ti * 3}" ry="${5 + ti}"/>`;
+      hubs += `<path class="draw" style="--i:${ti}" d="M${cx},${t.y + 14} c-11,-3 -18,5 -12,12 c4,4 10,1 8,-4 M${cx},${t.y + 14} c11,-3 18,5 12,12 c-4,4 -10,1 -8,-4"/>`;
+      [-1, 1].forEach((side) => {
+        for (let j = 1; j <= t.n; j++) {
+          const x = cx + side * Math.round((t.reach * j) / t.n);
+          const cup = t.y - 8 - j * 2;
+          const dip = t.y + 24 + j * 4;
+          arms += `<path class="draw" style="--i:${ti}" d="M${cx},${t.y} C${cx + side * 16},${dip} ${x - side * 12},${dip} ${x},${cup}"/>`;
+          arms += `<path d="M${x - 8},${cup} q8,7 16,0"/>`;
+          candle(x, cup, ti);
+        }
+      });
+    });
+    // the ring
+    const ring = { y: 254, rx: 138, ry: 15 };
+    let pendants = "";
+    for (let k = 0; k <= 8; k++) {
+      const a = (Math.PI * k) / 8;
+      const x = cx + ring.rx * Math.cos(a), y = ring.y + ring.ry * Math.sin(a);
+      arms += `<path d="M${(x - 7).toFixed(1)},${(y - 3).toFixed(1)} q7,6 14,0"/>`;
+      candle(x, y - 3, 2);
+      if (k % 2 === 1) {
+        const px = cx + ring.rx * Math.cos(a), py = ring.y + ring.ry * Math.sin(a);
+        pendants += `<path d="M${px.toFixed(1)},${(py + 2).toFixed(1)} v10"/><path d="M${px.toFixed(1)},${(py + 12).toFixed(1)} c3.4,4.6 3.4,8 0,11 c-3.4,-3 -3.4,-6.4 0,-11 z"/>`;
+      }
+    }
+    return `
+    <svg class="ag-chandelier" viewBox="0 0 320 370" aria-hidden="true">
+      <defs><radialGradient id="agGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#FFE3A0" stop-opacity="0.62"/><stop offset="55%" stop-color="#FFE3A0" stop-opacity="0.15"/><stop offset="100%" stop-color="#FFE3A0" stop-opacity="0"/>
+      </radialGradient></defs>
+      <ellipse class="ag-glow" cx="160" cy="200" rx="176" ry="160" fill="url(#agGlow)"/>
+      <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M160,0 V56" stroke-dasharray="2 6"/>
+        <circle cx="160" cy="61" r="4.5"/>
+        <path d="M143,84 q17,-30 34,0 z"/><path d="M138,84 H182"/>
+        <g class="ag-chains" stroke-width="1" stroke-dasharray="1.5 4.5">
+          <path d="M146,84 L${cx - ring.rx},${ring.y}"/><path d="M174,84 L${cx + ring.rx},${ring.y}"/>
+          <path d="M152,84 L${cx - 72},${ring.y + 13}"/><path d="M168,84 L${cx + 72},${ring.y + 13}"/>
+        </g>
+        <path class="draw" style="--i:0" d="M160,84 V292"/>
+        ${hubs}
+        <path class="draw" style="--i:2" d="M160,236 C122,272 66,268 ${cx - ring.rx},${ring.y}"/>
+        <path class="draw" style="--i:2" d="M160,236 C198,272 254,268 ${cx + ring.rx},${ring.y}"/>
+        <ellipse cx="160" cy="${ring.y}" rx="${ring.rx}" ry="${ring.ry}" opacity="0.45"/>
+        <path d="M${cx - ring.rx},${ring.y} A${ring.rx},${ring.ry} 0 0 0 ${cx + ring.rx},${ring.y}" stroke-width="1.9"/>
+        ${arms}
+        <g stroke-width="1.1">${pendants}</g>
+        <circle cx="160" cy="306" r="15"/>
+        <path d="M147,300 q13,11 26,0 M147,312 q13,-11 26,0 M160,291 v30" opacity="0.8"/>
+        <path d="M160,321 c6,9 6,18 0,30 c-6,-12 -6,-21 0,-30 z"/>
+      </g>
+      <g class="ag-candles">${candles}</g>
+      <g class="ag-flames">${flames}</g>
+    </svg>`;
+  }
+
+  // An olive branch: a curved stem, leaves alternating on both sides, a few olives.
+  function oliveArt(cls) {
+    const pt = (t) => {   // quadratic curve from (8,112) over (110,96) to (212,16)
+      const a = 1 - t;
+      return [a * a * 8 + 2 * a * t * 110 + t * t * 212, a * a * 112 + 2 * a * t * 96 + t * t * 16];
+    };
+    let leaves = "", olives = "";
+    for (let k = 0; k < 9; k++) {
+      const t = 0.1 + k * 0.1;
+      const [x, y] = pt(t), [x2, y2] = pt(t + 0.02);
+      const along = (Math.atan2(y2 - y, x2 - x) * 180) / Math.PI;
+      const side = k % 2 ? 1 : -1;
+      const rot = along + side * 38;
+      const rad = (rot * Math.PI) / 180;
+      const lx = x + Math.cos(rad) * 15, ly = y + Math.sin(rad) * 15;
+      leaves += `<ellipse cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" rx="15" ry="4.4" transform="rotate(${rot.toFixed(1)} ${lx.toFixed(1)} ${ly.toFixed(1)})" opacity="${k % 2 ? 0.6 : 0.82}"/>`;
+      if (k === 2 || k === 5 || k === 7) olives += `<ellipse cx="${(x + 3).toFixed(1)}" cy="${(y + 11).toFixed(1)}" rx="4.6" ry="6.2"/>`;
+    }
+    return `<svg class="ag-olive ${cls || ""}" viewBox="0 0 220 124" aria-hidden="true">
+      <path d="M8,112 Q110,96 212,16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <g fill="currentColor">${leaves}</g><g class="ag-olives">${olives}</g></svg>`;
+  }
+
+  // A Byzantine church in line art: dome on a drum, tiled roofs, bell tower, arched door.
+  const churchArt = () => `
+    <svg class="ag-church reveal" viewBox="0 0 320 232" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+      <path d="M8,214 H312" opacity="0.5"/>
+      <path d="M40,214 V92 H80 V214"/>
+      <path class="roof" d="M35,92 H85 L60,60 Z"/>
+      <path d="M60,60 V44 M54,50 H66"/>
+      <path d="M51,130 V112 Q60,101 69,112 V130 Z M51,172 V154 Q60,143 69,154 V172 Z"/>
+      <path d="M80,214 V136 H256 V214"/>
+      <path class="roof" d="M72,136 H264 L240,110 H96 Z"/>
+      <path d="M122,110 V88 H214 V110"/>
+      <path class="roof" d="M114,88 H222 L202,70 H134 Z"/>
+      <path d="M146,70 V52 H190 V70"/>
+      <path class="roof" d="M141,52 Q168,14 195,52 Z"/>
+      <path d="M168,30 V14 M162,20 H174"/>
+      <path d="M153,68 V60 Q157,55 161,60 V68 M164,68 V60 Q168,55 172,60 V68 M175,68 V60 Q179,55 183,60 V68"/>
+      <path d="M152,214 V178 Q168,158 184,178 V214"/>
+      <path d="M168,160 V214" opacity="0.5"/>
+      <path d="M98,196 V172 Q106,162 114,172 V196 Z M124,196 V172 Q132,162 140,172 V196 Z M196,196 V172 Q204,162 212,172 V196 Z M222,196 V172 Q230,162 238,172 V196 Z"/>
+      <path d="M140,106 V98 Q145,92 150,98 V106 Z M186,106 V98 Q191,92 196,98 V106 Z M163,106 V96 Q168,90 173,96 V106 Z"/>
+      <path d="M256,214 V158 H288 V214"/>
+      <path class="roof" d="M251,158 H293 L282,144 H256 Z"/>
+      <path d="M266,196 V178 Q272,171 278,178 V196 Z"/>
+    </svg>`;
+
+  // Two olive sprigs meeting: a small mark for the celebration after the ceremony.
+  const sprigArt = () => `<div class="ag-sprigs reveal" aria-hidden="true">${oliveArt("l")}${oliveArt("r")}</div>`;
+
   const commonRsvp = {
     yourName: "Your name", willAttend: "Will you attend?", guests: "Number of guests (including you)",
     message: "Message to the hosts (optional)", send: "Send RSVP",
@@ -83,7 +204,7 @@
       opening: {
         poster: M + "env-toscana.jpg", video: M + "open-toscana.mp4",
         hero: M + "hero-toscana.jpg", heroVideo: M + "hero-toscana.mp4",
-        sealPos: { x: 50, y: 50 }, sealSize: 20,
+        monogram: false,   // this seal carries its own crest
       },
       storyBg: M + "bg-toscana.jpg",
       assets: { venue: M + "venue-toscana.jpg" },
@@ -107,6 +228,33 @@
         }), { threshold: 0.3 }).observe(g);
       },
       art: { menuTop: ribbonBow },
+    },
+
+    // ------------------------------------------------------------------ agapi
+    agapi: {
+      id: "agapi", name: "Agápi", occasion: "Wedding · Greek",
+      swatch: ["#FBF7EE", "#1F3559", "#B8923A"],
+      fonts: G + "family=Great+Vibes&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap",
+      ornament: "✦",
+      envTint: { paper: "#F3E9D7", flap: "#EBE0CB", seal: "#E9DFC8" },
+      // The light embossed envelope. A film of its own is a drop-in replacement for these two files.
+      opening: { poster: M + "env-toscana.jpg", video: M + "open-toscana.mp4", monogram: false },   // this seal carries its own crest
+      photoFrame: "arch",
+      chapters: ["hero", "message", "countdown", "place:0", "section:family", "place:1", "section:dinner", "section:stay",
+                 "section:dress", "section:gift", "section:speeches", "music", "photo", "rsvp", "section:closing"],
+      labels: Object.assign({}, commonRsvp, {
+        eyebrow: "We are getting married", teaser: "With love", countdown: "Not long now",
+        yes: "Yes, I will attend", no: "No, I can't attend", cta: "RSVP",
+        thanksYes: "Wonderful! See you there,",
+      }),
+      i18n: {
+        sv: { eyebrow: "Vi gifter oss", teaser: "Välkommen till vårt bröllop", countdown: "Snart är det dags", thanksYes: "Vad roligt! Vi ses där," },
+      },
+      art: {
+        hero: () => chandelierArt() + oliveArt("l") + oliveArt("r"),
+        divider: `<div class="ag-key" aria-hidden="true"></div>`,
+        place: (p, index) => (index === 0 ? churchArt() : sprigArt()),
+      },
     },
 
     // -------------------------------------------------------------- botanical
@@ -323,6 +471,49 @@
         { type: "text", label: "Song request for the party", placeholder: "Artist – song" },
       ],
       hosts: "Elena & Matteo", rsvpDeadline: "2027-04-15", sealText: "E·M",
+    },
+
+    agapi: {
+      template: "agapi", lang: "sv", eventType: "Vi gifter oss",
+      title: "Eleni & Markus", dateText: "Lördagen den 21 augusti 2027", heroNote: "Nafplio, Grekland",
+      date: "2027-08-21", time: "18:00", timezone: "Europe/Athens", durationHours: 8,
+      venue: "Agios Spyridon", address: "Kapodistriou, Nafplio 211 00, Grekland",
+      envelopeTeaser: "Välkommen till vårt bröllop", sealText: "E·M",
+      message: "Vi har längtat efter att få samla alla vi tycker om på en och samma plats.\nNu är det äntligen dags, och vi hoppas att ni vill fira med oss vid havet i Nafplio.",
+      places: [
+        { title: "Vigsel", dateText: "Lördagen den 21 augusti 2027", time: "Kl. 18.00", name: "Agios Spyridon",
+          address: "Kapodistriou, Nafplio 211 00, Grekland", note: "Ceremonin hålls på grekiska och tar ungefär en timme.", calendar: true },
+        { title: "Efter vigseln", lead: "Kvällen fortsätter med middag och dans på", name: "Ktima Elaia",
+          address: "Nafplio, Grekland" },
+      ],
+      sections: [
+        { key: "family", blocks: [
+          { heading: "Våra föräldrar", lines: ["Dimitris & Sofia Papas", "Anders & Karin Lind"] },
+          { heading: "Våra vigselvittnen", lines: ["Nikos Papas & Maria Lind"] } ] },
+        { key: "dinner", title: "Middag", blocks: [
+          { text: "Maten serveras på stora fat mitt på borden, så att alla får smaka av allt.\nBerätta gärna om matval och allergier när ni svarar." } ] },
+        { key: "stay", title: "Boende", blocks: [
+          { text: "Det finns flera fina hotell i gamla stan, på gångavstånd från kyrkan.",
+            buttons: [{ label: "Hotell i Nafplio", url: "https://www.google.com/maps/search/?api=1&query=hotels+Nafplio" }] } ] },
+        { key: "dress", title: "Klädkod", lead: "Sommarfin", blocks: [{ text: "Luftigt och festligt. Kvällarna är varma." }] },
+        { key: "gift", title: "Gåva", blocks: [{ text: "Att ni kommer är gåva nog.\nVill ni ändå ge något blir vi glada för ett bidrag till vår bröllopsresa." }] },
+        { key: "speeches", title: "Tal & hälsningar", blocks: [
+          { text: "Vill ni hålla tal eller sjunga något under kvällen? Hör av er till vår toastmaster i god tid." } ] },
+        { key: "closing", blocks: [
+          { text: "Vi längtar efter att få skratta, äta och dansa med er." },
+          { style: "signature", lines: ["Eleni & Markus"] } ] },
+      ],
+      music: [
+        { title: "Extraordinary Moment", artist: "ChillØut, Soul Frequency, D'Michel Leb", spotify: "https://open.spotify.com/track/3F42efYjs67eHIFhgz2r6S" },
+        { title: "Orchestra Love Story", artist: "Syed Saiful Mujtahid", spotify: "https://open.spotify.com/track/1Y5nb9F1LvIA6j90oqjDsa" },
+      ],
+      photoUrl: M + "couple-toscana.jpg",
+      rsvpIntro: "Vi vill gärna veta om ni kommer.", rsvpDeadline: "2027-06-15",
+      questions: [
+        { type: "choice", perGuest: true, label: "Matval", options: ["Kött", "Kyckling", "Vegetariskt", "Veganskt"] },
+        { type: "text", label: "Allergier eller specialkost" },
+      ],
+      hosts: "Eleni & Markus", hideRsvpHosts: true,
     },
 
     botanical: {
