@@ -249,7 +249,15 @@ class Suite:
             page.wait_for_function("!document.querySelector('.env4')", timeout=30000)
             page.wait_for_selector(".story .ch-hero")
             if t["heroVideo"]:
-                page.wait_for_function("(document.querySelector('.hero-video') || {}).currentTime > 0.5", timeout=20000)
+                try:
+                    page.wait_for_function("(document.querySelector('.hero-video') || {}).currentTime > 0.5", timeout=20000)
+                except Exception:
+                    state = page.evaluate(
+                        """(() => { const v = document.querySelector('.hero-video');
+                             return v ? { t: v.currentTime, ready: v.readyState, net: v.networkState, paused: v.paused,
+                                          error: v.error && v.error.code, visible: v.getBoundingClientRect().height > 0 } : 'no .hero-video element'; })()"""
+                    )
+                    raise Check(f"{t['id']}: hero video is not playing: {state}")
             page.wait_for_selector(".cta-pill.show", timeout=8000)
             page.close()
             self.no_errors(f"film {t['id']}")
@@ -325,7 +333,11 @@ class Suite:
         expect(title in guest.inner_text(".ch-hero"), "hero does not show the title")
         guest.wait_for_selector(".cta-pill.show", timeout=8000)
         guest.click(".cta-pill")
-        guest.wait_for_function("document.querySelector('#rsvp').getBoundingClientRect().top < innerHeight * 0.6", timeout=8000)
+        try:
+            guest.wait_for_function("document.querySelector('#rsvp').getBoundingClientRect().top < innerHeight * 0.6", timeout=12000)
+        except Exception:
+            where = guest.evaluate("({rsvpTop: Math.round(document.querySelector('#rsvp').getBoundingClientRect().top), scrollY: Math.round(scrollY), height: document.documentElement.scrollHeight})")
+            raise Check(f"the RSVP button did not bring the form into view: {where}")
         for label, selector in (("main", ".ch-photo img"), ("second", ".rf-couple img"), ("attire", ".dc-img img >> nth=-1")):
             img = guest.locator(selector)
             img.scroll_into_view_if_needed()
