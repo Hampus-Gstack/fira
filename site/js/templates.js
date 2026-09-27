@@ -2,7 +2,7 @@
 // The story mechanics live in invite-core. All artwork original.
 (function () {
   const G = "https://fonts.googleapis.com/css2?";
-  const M = "https://fira.cursuscapital.co/media/";
+  const M = "media/";  // theme media is served by the site itself (relative to the page)
 
   const branchArt = (flip) => `
     <svg class="bt-branch ${flip ? "flip" : ""}" viewBox="0 0 320 200" aria-hidden="true" data-depth="0.6">
