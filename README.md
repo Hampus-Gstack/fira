@@ -12,6 +12,9 @@ Animated digital invitations. A guest gets a link, sees a sealed envelope addres
 | `site/js/invite-core.js` | The invitation engine: envelope, film, chapters, RSVP. |
 | `site/js/templates.js` | Theme registry (identity, labels, chapter order, art) and sample data. |
 | `site/css/invite.css` | Engine styles and one block per theme. |
+| `site/js/scrollfilm.js` | A film cut into frames, drawn on a canvas at the position the page asks for. Frames load coarse to fine. |
+| `site/js/landing.js` | The landing page: the envelope film follows the scroll, then the live invitation inside the phone. |
+| `site/media/seq/<name>/` | A film as WebP frames with a `manifest.json` (frame count, brightness of each frame). |
 | `server/` | The API: FastAPI + SQLite. Invitations, RSVPs, uploaded photos, theme media. |
 | `tests/` | End-to-end suite and review-sheet generator (Playwright). |
 
@@ -45,6 +48,7 @@ cd server && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 pip install playwright && playwright install chromium
 python tests/e2e.py                 # local site, live API
 python tests/e2e.py --base prod     # the deployed site
+python tests/e2e.py --only landing  # one group: pages, landing, film, seal, lang, flow
 python tests/shots.py --themes chateau,toscana   # review sheets of every chapter
 ```
 
@@ -57,7 +61,7 @@ The suite publishes a real invitation through the editor, answers it as a guest,
 3. Add a `.theme-<id>` block to `site/css/invite.css`.
 4. Run `tests/shots.py --themes <id>` and look at the sheet.
 
-Chapters available to a theme: hero, photo, message, countdown, details, venue, schedule, dresscode, gifts, menu, accommodation, faq, contact, rsvp. A chapter renders only when the invitation has data for it.
+Chapters available to a theme: hero, photo, message, countdown, details, venue, place:<n>, schedule, dresscode, gifts, menu, accommodation, faq, contact, music, section:<key>, rsvp. A chapter renders only when the invitation has data for it.
 
 ## Deploy
 

@@ -6,7 +6,7 @@ Run from the repo root with a Python that has Playwright installed, in the FOREG
 
     python tests/e2e.py                      # local: serves site/ on 127.0.0.1:8090, talks to the live API
     python tests/e2e.py --base prod          # the deployed site
-    python tests/e2e.py --only pages,film    # any of: pages, film, seal, lang, flow
+    python tests/e2e.py --only pages,film    # any of: pages, landing, film, seal, lang, flow
     python tests/e2e.py --base prod --invite <id>   # one published invitation, read only
 
 `flow` publishes a real invitation through the editor, answers it as a guest, reads it back on
@@ -39,7 +39,7 @@ PROD = os.environ.get("FIRA_SITE_BASE", "https://hampus-gstack.github.io/fira").
 API = os.environ.get("FIRA_API_BASE", "https://fira.cursuscapital.co/api").rstrip("/")
 API_ORIGIN = API.rsplit("/api", 1)[0]
 PORT = 8090  # http://127.0.0.1:8090 is on the API's CORS allow-list
-GROUPS = ("pages", "film", "seal", "lang", "flow")
+GROUPS = ("pages", "landing", "film", "seal", "lang", "flow")
 
 
 class Check(Exception):
@@ -100,11 +100,18 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+class QuietServer(http.server.ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        # A browser that closes a page drops its open downloads. That is not an error worth a traceback.
+        if not isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            super().handle_error(request, client_address)
+
+
 @contextlib.contextmanager
 def local_site():
     base = f"http://127.0.0.1:{PORT}"
     try:
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), functools.partial(QuietHandler, directory=str(SITE)))
+        server = QuietServer(("127.0.0.1", PORT), functools.partial(QuietHandler, directory=str(SITE)))
     except OSError:
         try:
             with urllib.request.urlopen(base + "/js/invite-core.js", timeout=3) as r:
@@ -238,6 +245,86 @@ class Suite:
             self.no_errors(f"story {t['id']}")
         note = f" ({slow} image(s) still loading on this connection)" if slow else ""
         return f"{len(self.themes())} theme stories, 3 site pages{note}"
+
+    def test_landing(self):
+        """The landing page's opening film: it follows the scroll, then the invitation itself takes over."""
+        read = """() => { const film = document.querySelector('.film'), css = getComputedStyle(film);
+                   const caps = [...document.querySelectorAll('.film-step')].map(c => parseFloat(getComputedStyle(c).getPropertyValue('--o')) || 0);
+                   const c = document.querySelector('.phone-film'), box = c.getBoundingClientRect();
+                   const px = c.width ? [...c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data].slice(0, 3) : [0, 0, 0];
+                   return { beat: FiraLanding.beat(), frame: FiraLanding.film.drawn, count: FiraLanding.film.count,
+                            loaded: FiraLanding.film.loaded, over: parseFloat(css.getPropertyValue('--over')),
+                            fade: parseFloat(css.getPropertyValue('--fade')), caps, pixel: px[0] + px[1] + px[2],
+                            sideways: document.documentElement.scrollWidth - innerWidth,
+                            stage: [Math.round(box.top), Math.round(box.bottom), innerHeight] }; }"""
+        partial = []
+        for name, (w, h) in (("phone", (430, 860)), ("desktop", (1280, 860))):
+            page = self.page(w, h)
+
+            def go(beat):
+                page.evaluate("b => scrollTo({top: FiraLanding.scrollFor(b), behavior: 'instant'})", beat)
+                page.wait_for_function("b => Math.abs(FiraLanding.beat() - b) < 0.03", arg=beat, timeout=10000)
+                page.wait_for_timeout(250)
+                return page.evaluate(read)
+
+            page.goto(self.url("index.html"))
+            page.wait_for_function("window.FiraLanding && FiraLanding.film.count > 0", timeout=30000)
+            page.wait_for_function("FiraLanding.film.loaded >= 8", timeout=60000)   # the coarse pass: every 16th frame
+            s = page.evaluate(read)
+            expect(s["count"] >= 40, f"{name}: the film has only {s['count']} frames")
+            expect(s["beat"] == 0 and s["frame"] == 0, f"{name}: the envelope is not sealed at the top of the page: {s}")
+            expect(s["over"] > 0.95 and page.is_visible(".po-addr"), f"{name}: the greeting is missing on the sealed envelope")
+            expect(s["sideways"] <= 0, f"{name}: the page scrolls sideways by {s['sideways']}px")
+
+            s = go(1.5)
+            expect(0.38 * s["count"] <= s["frame"] <= 0.78 * s["count"], f"{name}: half way, the film shows frame {s['frame']} of {s['count']}")
+            expect(s["pixel"] > 0, f"{name}: the film canvas is empty")
+            expect(s["over"] < 0.05, f"{name}: the greeting is still on the envelope while it opens")
+            expect(s["fade"] == 0, f"{name}: the invitation shows through before the film has run")
+            top, bottom, screen = s["stage"]
+            held = (top <= 1 and bottom >= screen * 0.8) if name == "phone" else (top >= 0 and bottom <= screen)
+            expect(held, f"{name}: the film does not stay on screen while the page scrolls: {s['stage']}")
+
+            s = go(3.2)
+            expect(s["fade"] == 1 and s["frame"] >= s["count"] - 9, f"{name}: the film did not hand over to the invitation: {s}")
+            expect(s["caps"][2] > 0.9, f"{name}: caption 3 is not showing at its beat: {s['caps']}")
+            try:
+                page.wait_for_selector(".film.live-ready", timeout=45000)
+            except Exception:
+                raise Check(f"{name}: the invitation inside the phone did not load")
+            inside = page.frame_locator(".phone-live")
+            expect("Sofia" in inside.locator(".ch-hero").inner_text(), f"{name}: the invitation inside the phone shows no names")
+
+            go(5.0)
+            page.wait_for_timeout(600)
+            top = page.evaluate("""(() => { const w = document.querySelector('.phone-live').contentWindow;
+                      const r = w.document.querySelector('#rsvp').getBoundingClientRect(); return [Math.round(r.top), w.innerHeight, Math.round(w.scrollY)]; })()""")
+            expect(top[2] > 1000 and top[0] < top[1] * 0.5, f"{name}: the page did not scroll the invitation to its reply form: {top}")
+            expect(page.is_visible(".film-step:last-child .cap-ctas .btn-primary"), f"{name}: the last caption has no button")
+            expect(not inside.locator(".cta-pill").is_visible(), f"{name}: the invitation's own button shows inside the phone")
+
+            go(0)
+            page.click(".phone")                                            # a tap opens it: the page scrolls itself
+            try:
+                page.wait_for_function("FiraLanding.beat() > 2.9", timeout=9000)
+            except Exception:
+                raise Check(f"{name}: a tap on the envelope did not open it (beat {page.evaluate('FiraLanding.beat()'):.2f})")
+            s = page.evaluate(read)
+            if s["loaded"] < s["count"]:
+                partial.append(f"{name} {s['loaded']}/{s['count']}")
+            page.close()
+            self.no_errors(f"landing {name}")
+
+        page = self.browser.new_page(viewport={"width": 430, "height": 860}, reduced_motion="reduce")
+        page.goto(self.url("index.html"))
+        page.wait_for_selector("#tplGrid .tpl-card")
+        calm = page.evaluate("""({ live: document.querySelector('.film').classList.contains('film-live'),
+                                   caption: getComputedStyle(document.querySelector('.film-cap')).opacity,
+                                   hidden: [...document.querySelectorAll('.rv')].length })""")
+        expect(not calm["live"] and calm["caption"] == "1" and calm["hidden"] == 0, f"reduced motion is not respected: {calm}")
+        page.close()
+        note = f" (frames still arriving on this connection: {', '.join(partial)})" if partial else ""
+        return f"film follows the scroll on phone and desktop, invitation inside the phone, tap to open, reduced motion{note}"
 
     def test_film(self):
         films = [t for t in self.themes() if t["film"]]
@@ -537,15 +624,15 @@ def main():
                 started = time.time()
                 try:
                     detail = getattr(suite, "test_" + group)()
-                    print(f"PASS {group:<6} {time.time() - started:5.1f}s  {detail}")
+                    print(f"PASS {group:<7} {time.time() - started:5.1f}s  {detail}")
                 except Check as e:
                     failed += 1
-                    print(f"FAIL {group:<6} {time.time() - started:5.1f}s  {e}")
+                    print(f"FAIL {group:<7} {time.time() - started:5.1f}s  {e}")
                 except Exception as e:
                     failed += 1
                     own = [f for f in traceback.extract_tb(e.__traceback__) if f.filename == __file__]
                     where = f"e2e.py:{own[-1].lineno} `{own[-1].line}`" if own else "outside e2e.py"
-                    print(f"FAIL {group:<6} {time.time() - started:5.1f}s  {type(e).__name__}: {str(e).splitlines()[0][:200]} ({where})")
+                    print(f"FAIL {group:<7} {time.time() - started:5.1f}s  {type(e).__name__}: {str(e).splitlines()[0][:200]} ({where})")
                 suite.errors = []
         finally:
             suite.cleanup()

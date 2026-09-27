@@ -179,7 +179,7 @@
       envTint: { paper: "#4A1A24", flap: "#3E141D", seal: "#F3EEE6" },
       opening: {
         poster: M + "env-chateau.jpg", video: M + "open-chateau.mp4",
-        hero: M + "hero-chateau.jpg", heroVideo: M + "hero-chateau.mp4",
+        hero: M + "hero-chateau.jpg", thumb: M + "thumb-chateau.webp", heroVideo: M + "hero-chateau.mp4",
         sealPos: { x: 50, y: 50 }, sealSize: 22,
       },
       assets: { venue: M + "venue-chateau.jpg" },
@@ -203,7 +203,7 @@
       envTint: { paper: "#F3E9D7", flap: "#EBE0CB", seal: "#E9DFC8" },
       opening: {
         poster: M + "env-toscana.jpg", video: M + "open-toscana.mp4",
-        hero: M + "hero-toscana.jpg", heroVideo: M + "hero-toscana.mp4",
+        hero: M + "hero-toscana.jpg", thumb: M + "thumb-toscana.webp", heroVideo: M + "hero-toscana.mp4",
         monogram: false,   // this seal carries its own crest
       },
       storyBg: M + "bg-toscana.jpg",
@@ -265,7 +265,7 @@
       ornament: "❦",
       envTint: { paper: "#F1EADC", flap: "#E7DFCE", seal: "#7C1F2E" },
       opening: {
-        poster: M + "poster-botanical.jpg", video: M + "open-botanical-v2.mp4", hero: M + "hero-botanical.jpg",
+        poster: M + "poster-botanical.jpg", video: M + "open-botanical-v2.mp4", hero: M + "hero-botanical.jpg", thumb: M + "thumb-botanical.webp",
         monogram: false,
       },
       labels: Object.assign({}, commonRsvp, {

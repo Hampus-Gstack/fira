@@ -6,14 +6,16 @@
 <title>Fira — Animated invitations your guests will talk about</title>
 <meta name="description" content="Create a stunning animated digital invitation in minutes. Wax-seal envelope opening, live RSVP tracking, no app needed — just a link.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23C25A3A'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Georgia' font-size='34' fill='%23FAF6EF'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="preload" as="image" href="media/env-chateau.jpg" fetchpriority="high">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/site.css">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Great+Vibes&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/site.css?v=20260927">
+<script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
 
-<nav class="nav">
+<nav class="nav nav-over">
   <a class="nav-logo" href="index.html"><span class="seal-dot">F</span>Fira</a>
   <div class="nav-links">
     <a href="#templates">Templates</a>
@@ -24,8 +26,10 @@
   </div>
 </nav>
 
-<header class="hero">
-  <div class="hero-copy">
+<!-- The opening, tied to scroll: the envelope film runs as the page moves, then the invitation itself. -->
+<div class="film-wrap">
+<section class="film" id="film" data-film="media/seq/open-chateau/">
+  <header class="film-hero">
     <p class="eyebrow">Digital invitations · RSVP included</p>
     <h1>Invitations that open like a <em>gift</em></h1>
     <p class="hero-sub">Skip the paper and the boring e-vite. Fira invitations arrive as a sealed envelope, open into a living animated page, and collect your RSVPs while you sleep.</p>
@@ -34,62 +38,110 @@
       <a class="btn btn-ghost" href="i.html?demo=chateau">See a live demo</a>
     </div>
     <p class="hero-note">Free while in beta · No app for your guests · Works on any phone</p>
+    <a class="scroll-cue" href="#film" data-open><i aria-hidden="true"></i>Scroll to open it</a>
+  </header>
+
+  <div class="film-stage" aria-hidden="true">
+    <div class="film-glow"></div>
+    <div class="phone">
+      <div class="phone-screen">
+        <img class="phone-still" data-src="media/hero-chateau.jpg" alt="" decoding="async">
+        <iframe class="phone-live" data-src="i.html?demo=chateau&amp;embed=1" title="" tabindex="-1"></iframe>
+        <canvas class="phone-film"></canvas>
+        <img class="phone-poster" src="media/env-chateau.jpg" alt="" decoding="async">
+        <div class="phone-over">
+          <p class="po-addr">For Anna &amp; Johan</p>
+          <p class="po-mono">S·M</p>
+          <p class="po-hint">Scroll or tap to open</p>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="hero-demo">
-    <iframe src="i.html?demo=chateau&embed=1" title="Live invitation demo" loading="lazy"></iframe>
+
+  <ol class="film-steps">
+    <li class="film-step"><div class="film-cap">
+      <p class="cap-no">01</p>
+      <h2>One tap and it comes alive</h2>
+      <p>It arrives sealed and greets each guest by name. A tap, and the seal catches light while gold runs through the embossing.</p>
+    </div></li>
+    <li class="film-step"><div class="film-cap">
+      <p class="cap-no">02</p>
+      <h2>Then it opens</h2>
+      <p>A short film made for the theme, with sound. It starts from the sealed envelope itself, so nothing jumps.</p>
+    </div></li>
+    <li class="film-step"><div class="film-cap">
+      <p class="cap-no">03</p>
+      <h2>And your story begins</h2>
+      <p>Your names, the date and the place over a living picture. Not a form with a header: a story, told as they scroll.</p>
+    </div></li>
+    <li class="film-step"><div class="film-cap">
+      <p class="cap-no">04</p>
+      <h2>Everything a guest needs</h2>
+      <p>A countdown to the day, the schedule, the way there, and one tap to put it in their calendar.</p>
+    </div></li>
+    <li class="film-step"><div class="film-cap">
+      <p class="cap-no">05</p>
+      <h2>Replies collect themselves</h2>
+      <p>Guests answer inside the invitation: who is coming, a meal for every guest, allergies. You watch the list fill on a private dashboard.</p>
+      <div class="cap-ctas">
+        <a class="btn btn-primary" href="create.html">Create your invitation</a>
+        <a class="btn btn-ghost" href="i.html?demo=chateau">Open the live demo</a>
+      </div>
+    </div></li>
+  </ol>
+</section>
+</div>
+
+<section class="section" id="templates">
+  <div class="section-head rv">
+    <h2>Themes with a pulse</h2>
+    <p>Tap any theme to open a live sample invitation: seal, film, story and RSVP.</p>
   </div>
-</header>
+  <div class="tpl-grid" id="tplGrid"></div>
+</section>
 
 <section class="section" id="how">
-  <div class="section-head">
+  <div class="section-head rv">
     <h2>Three minutes to “wooow”</h2>
     <p>No design skills, no downloads, no printing deadline panic.</p>
   </div>
   <div class="steps">
-    <div class="step"><span class="step-num">1</span>
+    <div class="step rv"><span class="step-num">1</span>
       <h3>Pick a theme</h3>
       <p>A burgundy château romance, a Tuscan watercolor, a Greek church wedding by lamplight, candle-lit noir, confetti birthdays and more. Each arrives as a sealed envelope.</p>
     </div>
-    <div class="step"><span class="step-num">2</span>
+    <div class="step rv" style="--d:110ms"><span class="step-num">2</span>
       <h3>Make it yours</h3>
-      <p>Names, date, venue, schedule, your own RSVP questions. Watch the invitation update live as you type — exactly what your guests will see.</p>
+      <p>Names, date, venue, schedule, your own RSVP questions. Watch the invitation update live as you type, exactly as your guests will see it.</p>
     </div>
-    <div class="step"><span class="step-num">3</span>
+    <div class="step rv" style="--d:220ms"><span class="step-num">3</span>
       <h3>Share the link</h3>
       <p>One link, sent by WhatsApp, SMS or email. Guests RSVP right inside the invitation and you watch replies land on your private dashboard.</p>
     </div>
   </div>
 </section>
 
-<section class="section" id="templates">
-  <div class="section-head">
-    <h2>Themes with a pulse</h2>
-    <p>Tap any theme to open a live sample invitation — seal, film, story and RSVP.</p>
-  </div>
-  <div class="tpl-grid" id="tplGrid"></div>
-</section>
-
 <section class="section">
-  <div class="section-head">
+  <div class="section-head rv">
     <h2>Everything the paper version can't do</h2>
   </div>
-  <div class="feat-grid">
-    <div class="feat"><div class="f-ico">🎬</div><h3>Cinematic openings</h3><p>Curtains part. A countdown bursts. A seal breaks. Every theme opens with its own scene — and it can greet each guest by name.</p></div>
-    <div class="feat"><div class="f-ico">📸</div><h3>Your photo, framed</h3><p>Add a photo and each theme frames it its own way — an oval vignette, a tilted polaroid, a golden deco frame.</p></div>
-    <div class="feat"><div class="f-ico">📋</div><h3>Live RSVP tracking</h3><p>See yes, no and party sizes in real time. Export the guest list to CSV whenever you need it.</p></div>
-    <div class="feat"><div class="f-ico">🍽️</div><h3>Custom questions</h3><p>Meal choice for every guest in the party, allergies, song requests. Ask anything and get it back as a list.</p></div>
-    <div class="feat"><div class="f-ico">📅</div><h3>Countdown & calendar</h3><p>A live countdown builds the anticipation, and guests add the event to their calendar in one tap.</p></div>
-    <div class="feat"><div class="f-ico">✏️</div><h3>Edit after sending</h3><p>Venue changed? Time moved? Update the invitation and every guest's link updates instantly.</p></div>
-  </div>
+  <dl class="feat-list">
+    <div class="feat rv"><dt>Cinematic openings</dt><dd>Curtains part. A countdown bursts. A seal breaks. Every theme opens with its own scene, and it can greet each guest by name.</dd></div>
+    <div class="feat rv" style="--d:80ms"><dt>Your photo, framed</dt><dd>Add a photo and each theme frames it its own way: an oval vignette, a tilted polaroid, a golden deco frame.</dd></div>
+    <div class="feat rv"><dt>Live RSVP tracking</dt><dd>See yes, no and party sizes in real time. Export the guest list to CSV whenever you need it.</dd></div>
+    <div class="feat rv" style="--d:80ms"><dt>Custom questions</dt><dd>Meal choice for every guest in the party, allergies, song requests. Ask anything and get it back as a list.</dd></div>
+    <div class="feat rv"><dt>Countdown and calendar</dt><dd>A live countdown builds the anticipation, and guests add the event to their calendar in one tap.</dd></div>
+    <div class="feat rv" style="--d:80ms"><dt>Edit after sending</dt><dd>Venue changed? Time moved? Update the invitation and every guest's link updates instantly.</dd></div>
+  </dl>
 </section>
 
 <section class="section" id="pricing">
-  <div class="section-head">
+  <div class="section-head rv">
     <h2>Simple, honest pricing</h2>
     <p>One event, one price. No per-guest fees, no coins, no subscription. <b>Everything is free while we're in beta.</b></p>
   </div>
   <div class="price-grid">
-    <div class="price">
+    <div class="price rv">
       <h3>Spark</h3>
       <div class="p-amount">€0</div>
       <p class="p-note">For casual parties and testing the waters.</p>
@@ -101,7 +153,7 @@
       </ul>
       <a class="btn btn-ghost" href="create.html">Start free</a>
     </div>
-    <div class="price hot">
+    <div class="price hot rv" style="--d:110ms">
       <h3>Fest</h3>
       <div class="p-amount">€39 <small>/ event</small></div>
       <p class="p-note">For weddings and the parties that matter.</p>
@@ -114,7 +166,7 @@
       </ul>
       <a class="btn btn-primary" href="create.html">Free during beta</a>
     </div>
-    <div class="price">
+    <div class="price rv" style="--d:220ms">
       <h3>Studio</h3>
       <div class="p-amount">€249</div>
       <p class="p-note">We design a one-of-a-kind theme just for you.</p>
@@ -130,12 +182,12 @@
 </section>
 
 <section class="section">
-  <div class="section-head"><h2>Questions, answered</h2></div>
-  <div class="faq">
-    <details><summary>Do my guests need an app or account?</summary><p>No. The invitation is a web page — it opens in any browser on any phone, tablet or computer. Guests RSVP directly inside it.</p></details>
-    <details><summary>How do I send it?</summary><p>You get one link. Paste it into WhatsApp, SMS, email, or a Facebook group — anywhere you can share a link, you can send a Fira.</p></details>
+  <div class="section-head rv"><h2>Questions, answered</h2></div>
+  <div class="faq rv">
+    <details><summary>Do my guests need an app or account?</summary><p>No. The invitation is a web page. It opens in any browser on any phone, tablet or computer, and guests RSVP directly inside it.</p></details>
+    <details><summary>How do I send it?</summary><p>You get one link. Paste it into WhatsApp, SMS, email or a Facebook group. Anywhere you can share a link, you can send a Fira.</p></details>
     <details><summary>Can I change the invitation after sending it?</summary><p>Yes. Edits publish instantly to the same link, so every guest always sees the latest version.</p></details>
-    <details><summary>Where do RSVPs go?</summary><p>To your private host dashboard — a secret link only you have. You'll see who's coming, party sizes, answers to your questions, and messages.</p></details>
+    <details><summary>Where do RSVPs go?</summary><p>To your private host dashboard, a secret link only you have. You'll see who's coming, party sizes, answers to your questions, and messages.</p></details>
     <details><summary>What does "free while in beta" mean?</summary><p>All features are free right now. When we introduce paid plans, invitations created during the beta stay free forever.</p></details>
   </div>
 </section>
@@ -146,26 +198,8 @@
 </footer>
 
 <script src="js/config.js"></script>
-<script src="js/templates.js"></script>
-<script>
-  // Template gallery
-  const grid = document.getElementById("tplGrid");
-  Object.values(FIRA_TEMPLATES).forEach((t) => {
-    const s = FIRA_SAMPLES[t.id];
-    const a = document.createElement("a");
-    a.className = "tpl-card";
-    a.href = "i.html?demo=" + t.id;
-    const poster = t.opening && t.opening.hero;
-    a.innerHTML = `
-      <div class="tpl-thumb" style="background:${poster ? `url('${poster}') center 30%/cover` : t.swatch[0]};color:${poster ? "#fff" : t.swatch[1]}">
-        <span class="tpl-title" style="font-family:Fraunces,serif;${poster ? "text-shadow:0 2px 14px rgba(0,0,0,0.55)" : ""}">${s.title}</span>
-      </div>
-      <div class="tpl-meta">
-        <div><b>${t.name}</b><br><span>${t.occasion}</span></div>
-        <div class="tpl-swatches">${t.swatch.map((c) => `<i style="background:${c}"></i>`).join("")}</div>
-      </div>`;
-    grid.appendChild(a);
-  });
-</script>
+<script src="js/templates.js?v=20260927"></script>
+<script src="js/scrollfilm.js?v=20260927"></script>
+<script src="js/landing.js?v=20260927"></script>
 </body>
 </html>
