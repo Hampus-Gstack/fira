@@ -214,6 +214,27 @@
     if (REDUCED) root.querySelectorAll(".reveal").forEach((el) => el.classList.add("in"));
   }
 
+  // ---------- scroll to a chapter and stay on target ----------
+  // Images above the target may finish loading while the page glides and push it further down,
+  // so re-aim until it rests at the top. Any input from the guest cancels the correction.
+  function glideTo(el) {
+    const behavior = REDUCED ? "auto" : "smooth";
+    const atEnd = () => innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+    let last = null, calm = 0, tries = 0;
+    const stop = () => { clearInterval(timer); ["wheel", "touchstart", "keydown"].forEach((e) => removeEventListener(e, stop)); };
+    const timer = setInterval(() => {
+      const top = Math.round(el.getBoundingClientRect().top);
+      calm = top === last ? calm + 1 : 0;
+      last = top;
+      if (calm < 2) return;
+      if (Math.abs(top) > 6 && tries < 4 && !atEnd()) { tries++; calm = 0; el.scrollIntoView({ behavior, block: "start" }); }
+      else stop();
+    }, 200);
+    ["wheel", "touchstart", "keydown"].forEach((e) => addEventListener(e, stop, { passive: true, once: true }));
+    setTimeout(stop, 8000);
+    el.scrollIntoView({ behavior, block: "start" });
+  }
+
   // ---------- fullscreen ----------
   function tryFullscreen() {
     const el = document.documentElement;
@@ -785,8 +806,7 @@
         pill.innerHTML = theme.ctaStyle === "scroll"
           ? `<span>${L(theme, "cta", "Scroll to RSVP")}</span><i class="mouse" aria-hidden="true"></i>`
           : esc(theme.labels.cta || "Confirm attendance");
-        pill.addEventListener("click", () =>
-          wrap.querySelector("#rsvp").scrollIntoView({ behavior: REDUCED ? "auto" : "smooth" }));
+        pill.addEventListener("click", () => glideTo(wrap.querySelector("#rsvp")));
         stage.appendChild(pill);
         setTimeout(() => pill.classList.add("show"), 2400);
         new IntersectionObserver((es) =>

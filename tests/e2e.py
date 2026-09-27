@@ -340,7 +340,7 @@ class Suite:
         guest.wait_for_selector(".cta-pill.show", timeout=8000)
         guest.click(".cta-pill")
         try:
-            guest.wait_for_function("document.querySelector('#rsvp').getBoundingClientRect().top < innerHeight * 0.6", timeout=12000)
+            guest.wait_for_function("Math.abs(document.querySelector('#rsvp').getBoundingClientRect().top) <= 40", timeout=15000)
         except Exception:
             where = guest.evaluate("({rsvpTop: Math.round(document.querySelector('#rsvp').getBoundingClientRect().top), scrollY: Math.round(scrollY), height: document.documentElement.scrollHeight})")
             raise Check(f"the RSVP button did not bring the form into view: {where}")
