@@ -102,14 +102,16 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
 
-def rate_limit(request: Request, limit: int = 30, window: float = 60.0):
-    ip = client_ip(request)
+def rate_limit(request: Request, bucket: str, limit: int, window: float = 60.0):
+    """At most `limit` calls per `window` seconds, per visitor and per kind of action, so that
+    uploading photos never uses up the allowance for publishing."""
+    key = bucket + ":" + client_ip(request)
     now = time.time()
-    hits = [t for t in _hits.get(ip, []) if now - t < window]
+    hits = [t for t in _hits.get(key, []) if now - t < window]
     if len(hits) >= limit:
         raise HTTPException(429, "Slow down")
     hits.append(now)
-    _hits[ip] = hits
+    _hits[key] = hits
     if len(_hits) > 10_000:
         _hits.clear()
 
@@ -133,7 +135,7 @@ def health():
 
 @app.post("/api/invites")
 def create_invite(body: InviteIn, request: Request):
-    rate_limit(request, limit=10)
+    rate_limit(request, "publish", limit=10)
     raw = json.dumps(body.data)
     if len(raw.encode()) > MAX_INVITE_BYTES:
         raise HTTPException(413, "Invitation too large")
@@ -176,7 +178,7 @@ def update_invite(
     request: Request,
     x_admin_key: str | None = Header(default=None),
 ):
-    rate_limit(request)
+    rate_limit(request, "edit", limit=30)
     _auth(invite_id, x_admin_key)
     raw = json.dumps(body.data)
     if len(raw.encode()) > MAX_INVITE_BYTES:
@@ -195,7 +197,7 @@ def update_invite(
 
 @app.post("/api/invites/{invite_id}/rsvp")
 def create_rsvp(invite_id: str, body: RsvpIn, request: Request):
-    rate_limit(request, limit=15)
+    rate_limit(request, "rsvp", limit=15)
     answers = json.dumps(body.answers)
     if len(answers.encode()) > MAX_RSVP_BYTES:
         raise HTTPException(413, "Answers too large")
@@ -249,7 +251,7 @@ PHOTO_MAGIC = {b"\xff\xd8\xff": "image/jpeg", b"\x89PNG": "image/png", b"RIFF": 
 
 @app.post("/api/photos")
 async def upload_photo(file: UploadFile, request: Request):
-    rate_limit(request, limit=10)
+    rate_limit(request, "photo", limit=30)
     blob = await file.read()
     if len(blob) > MAX_PHOTO_BYTES:
         raise HTTPException(413, "Photo too large (max 2.5MB)")
