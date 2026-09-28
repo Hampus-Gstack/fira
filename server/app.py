@@ -169,6 +169,8 @@ def _share_html(lang: str, title: str, text: str, image: str, target: str, statu
     """A page for link previews. Everything that comes from an invitation is escaped."""
     e = lambda s: html.escape(s, quote=True)
     words = SHARE_WORDS.get(lang, SHARE_WORDS["en"])
+    open_label = words["open"]
+    script_target = json.dumps(target).replace("<", "\\u003c")   # never a closing tag inside the script
     page = f"""<!DOCTYPE html>
 <html lang="{e(lang)}">
 <head>
@@ -184,8 +186,8 @@ def _share_html(lang: str, title: str, text: str, image: str, target: str, statu
 <meta http-equiv="refresh" content="0; url={e(target)}">
 <style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#FAF6EF;color:#1E2A23;font-family:Georgia,serif;text-align:center}}a{{color:#C25A3A}}</style>
 </head>
-<body><p><a href="{e(target)}">{e(words["open"])}</a></p>
-<script>location.replace({json.dumps(target).replace("<", "\\u003c")});</script>
+<body><p><a href="{e(target)}">{e(open_label)}</a></p>
+<script>location.replace({script_target});</script>
 </body>
 </html>
 """
