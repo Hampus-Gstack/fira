@@ -852,17 +852,20 @@ html.sealed .env4 { touch-action: none; }
 .theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::after { top: 0; right: 0; background-position: right top; transform-origin: top right; }
 .theme-agapi .sec-closing::before { bottom: 0; left: 0; background-position: left bottom; transform-origin: bottom left; }
 .theme-agapi .sec-closing::after { bottom: 0; right: 0; background-position: right bottom; transform-origin: bottom right; }
+/* The pictures hang on `.near`: a chapter gets that class when it comes within a screen and a half. */
+.theme-agapi .ch-message.near::before, .theme-agapi .ch-message.near::after { background-image: url("../media/flowers-agapi-top.webp"); }
+.theme-agapi .sec-closing.near::before, .theme-agapi .sec-closing.near::after { background-image: url("../media/flowers-agapi-bottom.webp"); }
+.theme-agapi .ch-rsvp.near::before, .theme-agapi .ch-rsvp.near::after { background-image: url("../media/flowers-agapi-blue-top.webp"); }
 .theme-agapi .ch-message::before, .theme-agapi .ch-message::after {
-  mix-blend-mode: multiply; background-image: url("../media/flowers-agapi-top.jpg");
+  mix-blend-mode: multiply;
   -webkit-mask-image: linear-gradient(#000 72%, transparent 100%); mask-image: linear-gradient(#000 72%, transparent 100%);
 }
 .theme-agapi .sec-closing::before, .theme-agapi .sec-closing::after {
-  mix-blend-mode: multiply; background-image: url("../media/flowers-agapi-bottom.jpg");
+  mix-blend-mode: multiply;
   -webkit-mask-image: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); mask-image: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%);
   opacity: clamp(0, calc(var(--p, 1) * 3 - 0.6), 1);
 }
 .theme-agapi .ch-rsvp::before, .theme-agapi .ch-rsvp::after {
-  background-image: url("../media/flowers-agapi-blue-top.jpg");
   -webkit-mask-image: linear-gradient(#000 62%, transparent 100%); mask-image: linear-gradient(#000 62%, transparent 100%);
 }
 /* On a wide screen the two halves stand apart, so each also fades toward the middle of the page. */

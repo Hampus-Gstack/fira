@@ -307,16 +307,25 @@
     const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
     const onResize = () => { films.forEach((film) => film.resize()); update(); };
 
+    // What is fetched, and when. A chapter that comes within a screen and a half gets the class `near`
+    // (themes hang the pictures of their chapters on it), and a film its frames. While the envelope is
+    // sealed nothing of this starts: the opening film goes first ("fira:fed" says it has arrived).
     const near = new IntersectionObserver((entries) => entries.forEach((e) => {
-      if (e.isIntersecting) { near.unobserve(e.target); start(e.target); }
+      if (!e.isIntersecting) return;
+      near.unobserve(e.target);
+      if (e.target.classList.contains("ch")) e.target.classList.add("near");
+      else start(e.target);
     }), { rootMargin: "150% 0px 150% 0px" });
-    root.querySelectorAll(".art-film").forEach((canvas) => near.observe(canvas));
+    const begin = () => {
+      chapters.forEach((ch) => near.observe(ch));
+      root.querySelectorAll(".art-film").forEach((canvas) => near.observe(canvas));
+      root.querySelectorAll(".hero-side[data-bg]").forEach((el) => { el.style.backgroundImage = 'url("' + el.dataset.bg.replace(/["\\]/g, "") + '")'; });
+      if (heroCanvas) start(heroCanvas);
+    };
     root.querySelectorAll(".title-ink").forEach((ink) => ink.addEventListener("animationend", () => ink.classList.add("written")));
-    if (hero && heroCanvas) {
-      // While the opening film is still to be played, the hero's frames wait: the film goes first.
-      if (hero.classList.contains("held")) hero.addEventListener("fira:fed", () => start(heroCanvas), { once: true });
-      else start(heroCanvas);
-    }
+    const sealedHero = root.querySelector(".ch-hero.held");
+    if (sealedHero) sealedHero.addEventListener("fira:fed", begin, { once: true });
+    else begin();
 
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("resize", onResize);
@@ -418,7 +427,8 @@
       const held = !!(opts && opts._held);
       let bg = "";
       if (o.heroVideo) {
-        bg = `<div class="hero-bg"><video class="hero-video" ${held ? 'preload="none"' : 'autoplay data-live="1" preload="auto"'} muted loop playsinline poster="${esc(o.hero || "")}"><source src="${esc(o.heroVideo)}" type="video/mp4"></video></div>`;
+        // Sealed: the loop and its poster wait (`data-poster`), so that the film is fetched first.
+        bg = `<div class="hero-bg"><video class="hero-video" ${held ? `preload="none" data-poster="${esc(o.hero || "")}"` : `autoplay data-live="1" preload="auto" poster="${esc(o.hero || "")}"`} muted loop playsinline><source src="${esc(o.heroVideo)}" type="video/mp4"></video></div>`;
       } else if (o.hero) {
         bg = `<div class="hero-bg"><img src="${esc(o.hero)}" alt=""></div>`;
       }
@@ -429,7 +439,7 @@
       const showTime = data.time && !data.dateText;
       const dateLine = esc(longDate(data)) + (showTime ? " · " + esc(data.time) : "");
       const seq = staged && o.heroSeq && !REDUCED ? `<canvas class="hero-seq-film" data-seq="${esc(o.heroSeq)}" aria-hidden="true"></canvas>` : "";
-      const side = (cls, url) => (safeUrl(url) ? `<div class="hero-side ${cls}" style="background-image:url(&quot;${esc(safeUrl(url))}&quot;)"></div>` : "");
+      const side = (cls, url) => (safeUrl(url) ? `<div class="hero-side ${cls}" data-bg="${esc(safeUrl(url))}"></div>` : "");
       const sides = staged ? side("hs-env", o.poster) + side("hs-pic", o.hero) : "";
       const inside = `
         ${sides}${bg}${seq}${hasBg ? '<div class="hero-scrim"></div>' : ""}
@@ -457,7 +467,7 @@
       if (!src) return "";
       return `
       <section class="ch ch-photo" data-ch="photo">
-        <figure class="ph-frame ${theme.photoFrame ? "pf-" + theme.photoFrame : ""} reveal"><img src="${esc(src)}" alt=""></figure>
+        <figure class="ph-frame ${theme.photoFrame ? "pf-" + theme.photoFrame : ""} reveal"><img src="${esc(src)}" alt="" loading="lazy"></figure>
         ${data.photoTitle ? `<p class="ph-title reveal">${esc(data.photoTitle)}</p>` : ""}
         ${data.photoCaption ? `<p class="ph-caption reveal">${esc(data.photoCaption)}</p>` : ""}
       </section>`;
@@ -942,14 +952,17 @@
   // Sound: the opening film, and the music of the invitation (`backgroundMusic`, else the theme's
   // `music`). Browsers allow sound only from inside a tap, so the music starts with the tap that opens
   // the envelope, or with the first tap on the sound button, and loops from there on.
+  // A quarter of a second of silence. Played from inside the tap, it earns the player the right to
+  // start the music later, when the opening film has arrived and the line is free for it.
+  const SILENCE = "data:audio/wav;base64,UklGRhYIAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgATElTVBoAAABJTkZPSVNGVA4AAABMYXZmNjIuMTIuMTAyAGRhdGHQBwAAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIA=";
   const soundState = {
-    on: false, media: [], song: null, started: false, btn: null,
+    on: false, media: [], song: null, started: false, waiting: false, btn: null,
     set(v) {
       this.on = v;
       this.media.forEach((m) => (m.muted = !v));
       if (this.song) {
         this.song.muted = !v;
-        if (v && this.started && this.song.paused) { const p = this.song.play(); if (p && p.catch) p.catch(() => {}); }
+        if (v && this.started && !this.waiting && this.song.paused) { const p = this.song.play(); if (p && p.catch) p.catch(() => {}); }
       }
       if (this.btn) this.btn.classList.toggle("on", v);
     },
@@ -958,30 +971,42 @@
       const song = document.createElement("audio");
       song.className = "inv-song";
       song.preload = "none";
-      song.loop = true;
       song.volume = 0.85;          // phones ignore this: the level is set in the file
-      song.src = src;
+      song.dataset.src = src;
       stage.appendChild(song);
       this.song = song;
     },
-    start(muted) {                 // call from inside a tap
+    // Call from inside a tap. `hold`: something else is being fetched that must come first.
+    start(muted, hold) {
       if (!this.song || this.started) return;
       this.started = true;
+      this.waiting = !!hold;
       this.song.muted = !!muted;
+      this.song.loop = !hold;
+      this.song.src = hold ? SILENCE : this.song.dataset.src;
       const p = this.song.play();
-      if (p && p.catch) p.catch(() => { this.started = false; });
+      if (p && p.catch) p.catch(() => { this.started = false; this.waiting = false; });
+    },
+    go() {                         // the line is free: the music itself
+      if (!this.song || !this.started || !this.waiting) return;
+      this.waiting = false;
+      this.song.loop = true;
+      this.song.src = this.song.dataset.src;
+      if (document.hidden) return;
+      const p = this.song.play();
+      if (p && p.catch) p.catch(() => {});
     },
     hush() { if (this.song && !this.song.paused) this.song.pause(); },   // something else is playing
     reset() {
       if (this.song) { this.song.pause(); this.song.removeAttribute("src"); }
-      this.on = false; this.media = []; this.song = null; this.started = false; this.btn = null;
+      this.on = false; this.media = []; this.song = null; this.started = false; this.waiting = false; this.btn = null;
     },
   };
   document.addEventListener("visibilitychange", () => {   // no music from a page nobody is looking at
     const song = soundState.song;
     if (!song || !soundState.started) return;
     if (document.hidden) song.pause();
-    else if (soundState.on) { const p = song.play(); if (p && p.catch) p.catch(() => {}); }
+    else if (soundState.on && !soundState.waiting) { const p = song.play(); if (p && p.catch) p.catch(() => {}); }
   });
   function soundToggle(stage) {
     const b = document.createElement("button");
@@ -1138,7 +1163,11 @@
     const feed = () => {
       if (fed) return;
       fed = true;
-      if (loop) { loop.preload = "auto"; loop.load(); }
+      if (loop) {
+        if (loop.dataset.poster) loop.poster = loop.dataset.poster;
+        loop.preload = "auto"; loop.load();
+      }
+      soundState.go();
       hero.dispatchEvent(new Event("fira:fed"));
     };
     const arrived = () => {
@@ -1175,7 +1204,7 @@
     };
     function open(e) {
       if (opened) return;
-      if (e && e.isTrusted !== false) soundState.start(!!opts.startMuted);   // sound is allowed from inside a tap only
+      if (e && e.isTrusted !== false) soundState.start(!!opts.startMuted, !fed);   // sound is allowed from inside a tap only
       if (!film.getAttribute("src")) { wanted = true; return; }   // it opens as soon as the film is chosen
       opened = true;
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
