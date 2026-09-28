@@ -65,7 +65,7 @@ the scroll. Further down, a picture made with `figure(src, { film })` paints its
 
 | `opening` field | Meaning |
 |---|---|
-| `poster`, `video`, `videoLight` | The film's first frame, the film, and a 720p version for slow connections |
+| `poster`, `video`, `videoLight` | The film's first frame, the film, and a small version (720p, 1000 kbit/s) for lines under 8 Mbit/s |
 | `lands` | The second from which the names may arrive. Without it the film plays over the page and fades |
 | `hero`, `heroVideo` | The picture the film lands on, and a loop of it |
 | `heroSeq`, `pin` | A folder of frames (`media/seq/<name>/`) and for how many screens of scroll the hero is held |

@@ -1005,12 +1005,14 @@
   // while an envelope is still sealed does not leave the page locked.
   let unseal = null;
 
-  // Which film to play. A slow connection gets the lighter one (`opening.videoLight`). Browsers that do
-  // not say how fast they are connected are judged by how long the picture of the envelope took to arrive.
+  // Which film to play. The full film needs a line that carries 8 Mbit/s: below that the small one
+  // (`opening.videoLight`) plays without standing still, and on a phone it looks the same. Chrome says
+  // how fast the line is. Other browsers are judged by how fast the picture of the envelope arrived,
+  // which reads low rather than high, because the page fetches other things at the same time.
   function pickFilm(o) {
     if (!o.videoLight) return Promise.resolve(o.video);
     const c = navigator.connection || {};
-    if (c.saveData || (c.downlink > 0 && c.downlink < 5) || /(^|-)(2g|3g)$/.test(c.effectiveType || "")) return Promise.resolve(o.videoLight);
+    if (c.saveData || (c.downlink > 0 && c.downlink < 8) || /(^|-)(2g|3g)$/.test(c.effectiveType || "")) return Promise.resolve(o.videoLight);
     if (c.downlink > 0) return Promise.resolve(o.video);
     return new Promise((resolve) => {
       const img = new Image();
@@ -1019,8 +1021,9 @@
       timer = setTimeout(() => done(o.videoLight), 2500);        // still on its way: slow
       img.onload = () => {
         const e = (performance.getEntriesByName(img.src) || []).pop();
-        const bytes = e ? (e.transferSize || 0) : 0, ms = e ? e.responseEnd - e.requestStart : 0;
-        done(bytes > 20000 && ms > 0 && bytes * 8 / ms < 5000 ? o.videoLight : o.video);   // under 5 Mbit/s
+        const bytes = e ? (e.transferSize || 0) : 0, ms = e ? e.responseEnd - e.responseStart : 0;
+        if (bytes < 20000 || ms <= 0) return done(o.video);      // from the cache, or not measured: a second visit
+        done(bytes * 8 / ms < 8000 ? o.videoLight : o.video);
       };
       img.onerror = () => done(o.video);
       img.src = o.poster;
