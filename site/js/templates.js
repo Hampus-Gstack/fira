@@ -43,126 +43,6 @@
   </svg>`;
 
 
-  // ---- Agápi: line art drawn in code -------------------------------------------------
-  // A church chandelier in line art: a crown on a chain, two tiers of candles on scrolled arms,
-  // and below them the wide ring of candles that hangs in Orthodox churches, held by chains,
-  // with pendants underneath. The strokes draw themselves, then the candles light tier by tier.
-  function chandelierArt() {
-    const cx = 160;
-    let arms = "", hubs = "", candles = "", flames = "", count = 0;
-    const candle = (x, cup, tier) => {
-      candles += `<rect x="${(x - 2.4).toFixed(1)}" y="${(cup - 20).toFixed(1)}" width="4.8" height="20" rx="1"/>`;
-      flames += `<path class="flame" style="--t:${tier};--d:${((count++ * 0.37) % 1.9).toFixed(2)}s" d="M${x.toFixed(1)},${(cup - 33).toFixed(1)} c3.6,4.8 4.2,7.8 0,11.4 c-4.2,-3.6 -3.6,-6.6 0,-11.4 z"/>`;
-    };
-    [{ y: 128, reach: 50, n: 2 }, { y: 180, reach: 92, n: 3 }].forEach((t, ti) => {
-      hubs += `<ellipse cx="${cx}" cy="${t.y}" rx="${9 + ti * 3}" ry="${5 + ti}"/>`;
-      hubs += `<path class="draw" style="--i:${ti}" d="M${cx},${t.y + 14} c-11,-3 -18,5 -12,12 c4,4 10,1 8,-4 M${cx},${t.y + 14} c11,-3 18,5 12,12 c-4,4 -10,1 -8,-4"/>`;
-      [-1, 1].forEach((side) => {
-        for (let j = 1; j <= t.n; j++) {
-          const x = cx + side * Math.round((t.reach * j) / t.n);
-          const cup = t.y - 8 - j * 2;
-          const dip = t.y + 24 + j * 4;
-          arms += `<path class="draw" style="--i:${ti}" d="M${cx},${t.y} C${cx + side * 16},${dip} ${x - side * 12},${dip} ${x},${cup}"/>`;
-          arms += `<path d="M${x - 8},${cup} q8,7 16,0"/>`;
-          candle(x, cup, ti);
-        }
-      });
-    });
-    // the ring
-    const ring = { y: 254, rx: 138, ry: 15 };
-    let pendants = "";
-    for (let k = 0; k <= 8; k++) {
-      const a = (Math.PI * k) / 8;
-      const x = cx + ring.rx * Math.cos(a), y = ring.y + ring.ry * Math.sin(a);
-      arms += `<path d="M${(x - 7).toFixed(1)},${(y - 3).toFixed(1)} q7,6 14,0"/>`;
-      candle(x, y - 3, 2);
-      if (k % 2 === 1) {
-        const px = cx + ring.rx * Math.cos(a), py = ring.y + ring.ry * Math.sin(a);
-        pendants += `<path d="M${px.toFixed(1)},${(py + 2).toFixed(1)} v10"/><path d="M${px.toFixed(1)},${(py + 12).toFixed(1)} c3.4,4.6 3.4,8 0,11 c-3.4,-3 -3.4,-6.4 0,-11 z"/>`;
-      }
-    }
-    return `
-    <svg class="ag-chandelier" viewBox="0 0 320 370" aria-hidden="true">
-      <defs><radialGradient id="agGlow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#FFE3A0" stop-opacity="0.62"/><stop offset="55%" stop-color="#FFE3A0" stop-opacity="0.15"/><stop offset="100%" stop-color="#FFE3A0" stop-opacity="0"/>
-      </radialGradient></defs>
-      <ellipse class="ag-glow" cx="160" cy="200" rx="176" ry="160" fill="url(#agGlow)"/>
-      <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M160,0 V56" stroke-dasharray="2 6"/>
-        <circle cx="160" cy="61" r="4.5"/>
-        <path d="M143,84 q17,-30 34,0 z"/><path d="M138,84 H182"/>
-        <g class="ag-chains" stroke-width="1" stroke-dasharray="1.5 4.5">
-          <path d="M146,84 L${cx - ring.rx},${ring.y}"/><path d="M174,84 L${cx + ring.rx},${ring.y}"/>
-          <path d="M152,84 L${cx - 72},${ring.y + 13}"/><path d="M168,84 L${cx + 72},${ring.y + 13}"/>
-        </g>
-        <path class="draw" style="--i:0" d="M160,84 V292"/>
-        ${hubs}
-        <path class="draw" style="--i:2" d="M160,236 C122,272 66,268 ${cx - ring.rx},${ring.y}"/>
-        <path class="draw" style="--i:2" d="M160,236 C198,272 254,268 ${cx + ring.rx},${ring.y}"/>
-        <ellipse cx="160" cy="${ring.y}" rx="${ring.rx}" ry="${ring.ry}" opacity="0.45"/>
-        <path d="M${cx - ring.rx},${ring.y} A${ring.rx},${ring.ry} 0 0 0 ${cx + ring.rx},${ring.y}" stroke-width="1.9"/>
-        ${arms}
-        <g stroke-width="1.1">${pendants}</g>
-        <circle cx="160" cy="306" r="15"/>
-        <path d="M147,300 q13,11 26,0 M147,312 q13,-11 26,0 M160,291 v30" opacity="0.8"/>
-        <path d="M160,321 c6,9 6,18 0,30 c-6,-12 -6,-21 0,-30 z"/>
-      </g>
-      <g class="ag-candles">${candles}</g>
-      <g class="ag-flames">${flames}</g>
-    </svg>`;
-  }
-
-  // An olive branch: a curved stem, leaves alternating on both sides, a few olives.
-  function oliveArt(cls) {
-    const pt = (t) => {   // quadratic curve from (8,112) over (110,96) to (212,16)
-      const a = 1 - t;
-      return [a * a * 8 + 2 * a * t * 110 + t * t * 212, a * a * 112 + 2 * a * t * 96 + t * t * 16];
-    };
-    let leaves = "", olives = "";
-    for (let k = 0; k < 9; k++) {
-      const t = 0.1 + k * 0.1;
-      const [x, y] = pt(t), [x2, y2] = pt(t + 0.02);
-      const along = (Math.atan2(y2 - y, x2 - x) * 180) / Math.PI;
-      const side = k % 2 ? 1 : -1;
-      const rot = along + side * 38;
-      const rad = (rot * Math.PI) / 180;
-      const lx = x + Math.cos(rad) * 15, ly = y + Math.sin(rad) * 15;
-      leaves += `<ellipse cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" rx="15" ry="4.4" transform="rotate(${rot.toFixed(1)} ${lx.toFixed(1)} ${ly.toFixed(1)})" opacity="${k % 2 ? 0.6 : 0.82}"/>`;
-      if (k === 2 || k === 5 || k === 7) olives += `<ellipse cx="${(x + 3).toFixed(1)}" cy="${(y + 11).toFixed(1)}" rx="4.6" ry="6.2"/>`;
-    }
-    return `<svg class="ag-olive ${cls || ""}" viewBox="0 0 220 124" aria-hidden="true">
-      <path d="M8,112 Q110,96 212,16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-      <g fill="currentColor">${leaves}</g><g class="ag-olives">${olives}</g></svg>`;
-  }
-
-  // A Byzantine church in line art: dome on a drum, tiled roofs, bell tower, arched door.
-  const churchArt = () => `
-    <svg class="ag-church reveal" viewBox="0 0 320 232" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
-      <path d="M8,214 H312" opacity="0.5"/>
-      <path d="M40,214 V92 H80 V214"/>
-      <path class="roof" d="M35,92 H85 L60,60 Z"/>
-      <path d="M60,60 V44 M54,50 H66"/>
-      <path d="M51,130 V112 Q60,101 69,112 V130 Z M51,172 V154 Q60,143 69,154 V172 Z"/>
-      <path d="M80,214 V136 H256 V214"/>
-      <path class="roof" d="M72,136 H264 L240,110 H96 Z"/>
-      <path d="M122,110 V88 H214 V110"/>
-      <path class="roof" d="M114,88 H222 L202,70 H134 Z"/>
-      <path d="M146,70 V52 H190 V70"/>
-      <path class="roof" d="M141,52 Q168,14 195,52 Z"/>
-      <path d="M168,30 V14 M162,20 H174"/>
-      <path d="M153,68 V60 Q157,55 161,60 V68 M164,68 V60 Q168,55 172,60 V68 M175,68 V60 Q179,55 183,60 V68"/>
-      <path d="M152,214 V178 Q168,158 184,178 V214"/>
-      <path d="M168,160 V214" opacity="0.5"/>
-      <path d="M98,196 V172 Q106,162 114,172 V196 Z M124,196 V172 Q132,162 140,172 V196 Z M196,196 V172 Q204,162 212,172 V196 Z M222,196 V172 Q230,162 238,172 V196 Z"/>
-      <path d="M140,106 V98 Q145,92 150,98 V106 Z M186,106 V98 Q191,92 196,98 V106 Z M163,106 V96 Q168,90 173,96 V106 Z"/>
-      <path d="M256,214 V158 H288 V214"/>
-      <path class="roof" d="M251,158 H293 L282,144 H256 Z"/>
-      <path d="M266,196 V178 Q272,171 278,178 V196 Z"/>
-    </svg>`;
-
-  // Two olive sprigs meeting: a small mark for the celebration after the ceremony.
-  const sprigArt = () => `<div class="ag-sprigs reveal" aria-hidden="true">${oliveArt("l")}${oliveArt("r")}</div>`;
-
   const commonRsvp = {
     yourName: "Your name", willAttend: "Will you attend?", guests: "Number of guests (including you)",
     message: "Message to the hosts (optional)", send: "Send RSVP",
@@ -177,12 +57,16 @@
       fonts: G + "family=Great+Vibes&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap",
       ornament: "❦",
       envTint: { paper: "#4A1A24", flap: "#3E141D", seal: "#F3EEE6" },
+      // One shot: the sealed envelope, its light, clouds and doves, down into the garden. The film's last
+      // frame is the hero picture, where a loop of the same view takes over. `lands` is the second from
+      // which the names may arrive; `videoLight` is played on slow connections; `heroSeq` follows the scroll.
       opening: {
-        poster: M + "env-chateau.jpg", video: M + "open-chateau.mp4",
-        hero: M + "hero-chateau.jpg", thumb: M + "thumb-chateau.webp", heroVideo: M + "hero-chateau.mp4",
+        poster: M + "env-chateau-v2.jpg", video: M + "open-chateau-v2.mp4", videoLight: M + "open-chateau-v2-light.mp4", lands: 5.9,
+        hero: M + "hero-chateau-v2.jpg", thumb: M + "thumb-chateau-v2.webp", heroVideo: M + "hero-chateau-v2.mp4",
+        heroSeq: M + "seq/hero-chateau/", pin: 1,
         sealPos: { x: 50, y: 50 }, sealSize: 22,
       },
-      assets: { venue: M + "venue-chateau.jpg" },
+      assets: { venue: M + "venue-chateau-v2.jpg", venueReveal: "wipe" },
       heroLayout: "split", timelineCap: "✿", photoFrame: "gold",
       chapters: ["hero", "message", "countdown", "schedule", "venue", "dresscode", "contact", "rsvp"],
       labels: Object.assign({}, commonRsvp, {
@@ -236,9 +120,14 @@
       swatch: ["#FBF7EE", "#1F3559", "#B8923A"],
       fonts: G + "family=Great+Vibes&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap",
       ornament: "✦",
-      envTint: { paper: "#F3E9D7", flap: "#EBE0CB", seal: "#E9DFC8" },
-      // The light embossed envelope. A film of its own is a drop-in replacement for these two files.
-      opening: { poster: M + "env-toscana.jpg", video: M + "open-toscana.mp4", monogram: false },   // this seal carries its own crest
+      envTint: { paper: "#F4EEE2", flap: "#EBE0CB", seal: "#1F3559" },
+      // An ivory envelope with a blue seal opens into the light of a church lamp.
+      opening: {
+        poster: M + "env-agapi.jpg", video: M + "open-agapi.mp4", videoLight: M + "open-agapi-light.mp4", lands: 5.2,
+        hero: M + "hero-agapi.jpg", thumb: M + "thumb-agapi.webp", heroVideo: M + "hero-agapi.mp4",
+        heroSeq: M + "seq/hero-agapi/", pin: 1.1,
+        sealPos: { x: 50, y: 50 }, sealSize: 21,
+      },
       photoFrame: "arch",
       chapters: ["hero", "message", "countdown", "place:0", "section:family", "place:1", "section:dinner", "section:stay",
                  "section:dress", "section:gift", "section:speeches", "music", "photo", "rsvp", "section:closing"],
@@ -251,9 +140,11 @@
         sv: { eyebrow: "Vi gifter oss", teaser: "Välkommen till vårt bröllop", countdown: "Snart är det dags", thanksYes: "Vad roligt! Vi ses där," },
       },
       art: {
-        hero: () => chandelierArt() + oliveArt("l") + oliveArt("r"),
         divider: `<div class="ag-key" aria-hidden="true"></div>`,
-        place: (p, index) => (index === 0 ? churchArt() : sprigArt()),
+        // Watercolors that paint themselves as the guest scrolls to them: the church, then the dinner.
+        place: (p, index, figure) => (index === 0
+          ? figure(M + "church-agapi.jpg", { film: M + "seq/church-agapi/", ratio: "3/2" })
+          : figure(M + "dinner-agapi.jpg", { film: M + "seq/dinner-agapi/", ratio: "5/4" })),
       },
     },
 

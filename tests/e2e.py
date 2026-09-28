@@ -6,7 +6,7 @@ Run from the repo root with a Python that has Playwright installed, in the FOREG
 
     python tests/e2e.py                      # local: serves site/ on 127.0.0.1:8090, talks to the live API
     python tests/e2e.py --base prod          # the deployed site
-    python tests/e2e.py --only pages,film    # any of: pages, landing, film, seal, lang, flow
+    python tests/e2e.py --only pages,film    # any of: pages, landing, film, scroll, seal, lang, flow
     python tests/e2e.py --base prod --invite <id>   # one published invitation, read only
 
 `flow` publishes a real invitation through the editor, answers it as a guest, reads it back on
@@ -39,7 +39,7 @@ PROD = os.environ.get("FIRA_SITE_BASE", "https://hampus-gstack.github.io/fira").
 API = os.environ.get("FIRA_API_BASE", "https://fira.cursuscapital.co/api").rstrip("/")
 API_ORIGIN = API.rsplit("/api", 1)[0]
 PORT = 8090  # http://127.0.0.1:8090 is on the API's CORS allow-list
-GROUPS = ("pages", "landing", "film", "seal", "lang", "flow")
+GROUPS = ("pages", "landing", "film", "scroll", "seal", "lang", "flow")
 
 
 class Check(Exception):
@@ -170,6 +170,8 @@ class Suite:
                 """Object.values(FIRA_TEMPLATES).map(t => ({
                      id: t.id, film: !!(t.opening && t.opening.video),
                      heroVideo: !!(t.opening && t.opening.heroVideo),
+                     lands: (t.opening && t.opening.lands) || 0,
+                     heroSeq: !!(t.opening && t.opening.heroSeq),
                      sample: !!FIRA_SAMPLES[t.id] }))"""
             )
             page.close()
@@ -180,7 +182,7 @@ class Suite:
     def open_envelope(self, page, film):
         if film:
             page.wait_for_selector(".env4-tap")
-            page.wait_for_function("document.querySelector('.env4-film').readyState >= 3", timeout=45000)
+            page.wait_for_function("document.querySelector('.hero-film, .env4-film').readyState >= 3", timeout=45000)
             page.click(".env4-tap")
         else:
             page.wait_for_selector(".env3-seal")
@@ -327,6 +329,8 @@ class Suite:
         return f"film follows the scroll on phone and desktop, invitation inside the phone, tap to open, reduced motion{note}"
 
     def test_film(self):
+        """Every theme with a film: sealed, tap, the film with sound, the story. A film that lands on the
+        hero plays inside it: the names wait until it has settled, then the hero follows the scroll."""
         films = [t for t in self.themes() if t["film"]]
         expect(films, "no theme has an opening film")
         slow = []
@@ -337,22 +341,49 @@ class Suite:
             expect("Anna & Johan" in page.inner_text(".env4-addr"), f"{t['id']}: envelope is not addressed to the guest")
             expect(page.is_visible(".env4-sound"), f"{t['id']}: sound hint missing on the sealed envelope")
             expect(page.is_visible(".env4-hint"), f"{t['id']}: tap hint missing")
-            page.wait_for_function("document.querySelector('.env4-film').readyState >= 3", timeout=45000)
-            expect(page.evaluate("document.querySelector('.env4-film').paused"), f"{t['id']}: film plays before the tap")
+            if t["lands"]:
+                page.evaluate("scrollTo(0, 400)")
+                page.wait_for_timeout(250)
+                sealed = page.evaluate(
+                    """(() => { const h = document.querySelector('.ch-hero'), words = h.querySelector('.ch-inner');
+                         return { held: h.classList.contains('held'), words: getComputedStyle(words).visibility,
+                                  locked: document.documentElement.classList.contains('sealed'), moved: scrollY,
+                                  inside: !!h.querySelector('.hero-stage > .hero-film') }; })()"""
+                )
+                expect(sealed["held"] and sealed["words"] == "hidden", f"{t['id']}: the names show on the sealed envelope: {sealed}")
+                expect(sealed["locked"] and sealed["moved"] == 0, f"{t['id']}: the page scrolls behind the sealed envelope: {sealed}")
+                expect(sealed["inside"], f"{t['id']}: the film is not inside the hero")
+            page.wait_for_function("document.querySelector('.hero-film, .env4-film').readyState >= 3", timeout=45000)
+            expect(page.evaluate("document.querySelector('.hero-film, .env4-film').paused"), f"{t['id']}: film plays before the tap")
             page.click(".env4-tap")
             page.wait_for_timeout(1600)
             state = page.evaluate(
-                """(() => { const f = document.querySelector('.env4-film');
+                """(() => { const f = document.querySelector('.hero-film, .env4-film'), h = document.querySelector('.ch-hero');
                      const o = s => parseFloat(getComputedStyle(document.querySelector(s)).opacity);
                      return { t: f.currentTime, muted: f.muted, addr: o('.env4-addr'), hint: o('.env4-hint'),
-                              sound: o('.env4-sound'), toggle: document.querySelector('.snd-toggle').classList.contains('on') }; })()"""
+                              sound: o('.env4-sound'), toggle: document.querySelector('.snd-toggle').classList.contains('on'),
+                              held: !!h && h.classList.contains('held') }; })()"""
             )
             expect(state["t"] > 0.5, f"{t['id']}: film did not start ({state['t']:.2f}s)")
             expect(not state["muted"] and state["toggle"], f"{t['id']}: film did not start with sound on")
             for key in ("addr", "hint", "sound"):
                 expect(state[key] < 0.15, f"{t['id']}: envelope overlay '{key}' still visible during the film (opacity {state[key]:.2f})")
+            if t["lands"]:
+                expect(state["held"], f"{t['id']}: the names arrive before the film has landed")
+                page.wait_for_function("!document.querySelector('.ch-hero').classList.contains('held')", timeout=20000)
+                landed = page.evaluate("document.querySelector('.hero-film').currentTime")
+                expect(t["lands"] - 0.05 <= landed <= t["lands"] + 0.8, f"{t['id']}: the names arrived at {landed:.2f}s, the film lands at {t['lands']}s")
+                expect(page.evaluate("!!document.querySelector('.env4') && document.documentElement.classList.contains('sealed')"),
+                       f"{t['id']}: the page opened before the film had ended")
             page.wait_for_function("!document.querySelector('.env4')", timeout=30000)
             page.wait_for_selector(".story .ch-hero")
+            if t["lands"]:
+                page.wait_for_function("!document.querySelector('.hero-film')", timeout=5000)
+                after = page.evaluate(
+                    """({ locked: document.documentElement.classList.contains('sealed'), toggle: !!document.querySelector('.snd-toggle'),
+                          words: getComputedStyle(document.querySelector('.ch-hero .ch-inner')).visibility })"""
+                )
+                expect(not after["locked"] and not after["toggle"] and after["words"] == "visible", f"{t['id']}: the page is not open after the film: {after}")
             if t["heroVideo"]:
                 try:
                     page.wait_for_function("(document.querySelector('.hero-video') || {}).currentTime > 0.5", timeout=20000)
@@ -370,8 +401,95 @@ class Suite:
             page.wait_for_selector(".cta-pill.show", timeout=8000)
             page.close()
             self.no_errors(f"film {t['id']}")
+        landing = [t for t in films if t["lands"]]
+        if landing:
+            theme = landing[0]["id"]
+            # a slow connection gets the light film
+            context = self.browser.new_context(viewport={"width": 430, "height": 860})
+            context.add_init_script("Object.defineProperty(navigator, 'connection', { value: { downlink: 1.2, effectiveType: '3g', saveData: false } })")
+            page = context.new_page()
+            page.goto(self.url(f"i.html?demo={theme}"))
+            page.wait_for_function("!!(document.querySelector('.hero-film') || {}).currentSrc", timeout=20000)
+            chosen = page.evaluate("document.querySelector('.hero-film').currentSrc.split('/').pop()")
+            context.close()
+            expect(chosen.endswith("-light.mp4"), f"{theme}: a slow connection was given {chosen}")
+            # drawn again while sealed (the editor does that): the page must not stay locked
+            page = self.page()
+            page.goto(self.url(f"i.html?demo={theme}"))
+            page.wait_for_selector(".env4-tap")
+            state = page.evaluate(
+                """async (theme) => { const before = document.documentElement.classList.contains('sealed');
+                     FiraInvite.render(JSON.parse(JSON.stringify(FIRA_SAMPLES[theme])), document.getElementById('mount'), { skipEnvelope: true });
+                     await new Promise(r => setTimeout(r, 300));
+                     scrollTo(0, 500); await new Promise(r => setTimeout(r, 300));
+                     return { before, after: document.documentElement.classList.contains('sealed'), moved: scrollY, envelope: !!document.querySelector('.env4') }; }""",
+                theme,
+            )
+            page.close()
+            expect(state["before"] and not state["after"] and state["moved"] == 500 and not state["envelope"],
+                   f"{theme}: drawn again while sealed, the page stays locked: {state}")
+            self.no_errors(f"film {theme} (light film, drawn again)")
         note = f" (hero video still buffering on this connection: {', '.join(slow)})" if slow else ""
-        return ", ".join(t["id"] for t in films) + note
+        return ", ".join(t["id"] + ("*" if t["lands"] else "") for t in films) + " (* lands on the hero); light film on a slow connection" + note
+
+    def test_scroll(self):
+        """Pictures that follow the scroll inside the story: the held hero and the paintings."""
+        seen = []
+        for t in self.themes():
+            page = self.page()
+            page.goto(self.url(f"i.html?demo={t['id']}&embed=1"))
+            page.wait_for_selector(".story .ch-hero")
+            figures = page.locator(".venue-art.has-film").count()
+            if not (t["heroSeq"] or figures):
+                page.close()
+                continue
+            if t["heroSeq"]:
+                page.wait_for_function("(() => { const c = document.querySelector('.hero-seq-film'); return c && c.width > 0; })()", timeout=30000)
+                hero = page.evaluate("(() => { const r = document.querySelector('.ch-hero').getBoundingClientRect(); return { range: r.height - innerHeight, screen: innerHeight }; })()")
+                expect(hero["range"] > hero["screen"] * 0.5, f"{t['id']}: the hero is not held while the page scrolls: {hero}")
+                page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", hero["range"] * 0.5)
+                page.wait_for_function("document.querySelector('.ch-hero').classList.contains('filming')", timeout=30000)
+                mid = page.evaluate(
+                    """(() => { const h = document.querySelector('.ch-hero'), s = h.querySelector('.hero-stage').getBoundingClientRect();
+                         const c = h.querySelector('.hero-seq-film');
+                         const px = [...c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data];
+                         return { pin: parseFloat(getComputedStyle(h).getPropertyValue('--pin-p')), top: Math.round(s.top),
+                                  bottom: Math.round(s.bottom), screen: innerHeight, pixel: px[0] + px[1] + px[2],
+                                  words: getComputedStyle(h.querySelector('.ch-inner')).filter }; })()"""
+                )
+                expect(abs(mid["pin"] - 0.5) < 0.02, f"{t['id']}: half way through its hold the hero reports {mid['pin']}")
+                expect(mid["top"] == 0 and mid["bottom"] >= mid["screen"] - 1, f"{t['id']}: the hero does not stay on screen: {mid}")
+                expect(mid["pixel"] > 0, f"{t['id']}: the hero film is empty")
+                expect("opacity(0)" in mid["words"], f"{t['id']}: the names are still over the hero half way: {mid['words']}")
+                page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
+                page.wait_for_function("!document.querySelector('.ch-hero').classList.contains('filming')", timeout=5000)
+            for i in range(figures):
+                fig = page.locator(".venue-art.has-film").nth(i)
+                top = fig.evaluate("f => f.getBoundingClientRect().top + scrollY")
+                screen = page.evaluate("innerHeight")
+                page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", max(0, top - screen * 0.94 + 0.5 * screen * 0.62))
+                try:
+                    page.wait_for_function(
+                        """i => { const f = document.querySelectorAll('.venue-art.has-film')[i];
+                                  const ap = parseFloat(getComputedStyle(f).getPropertyValue('--ap'));
+                                  return f.classList.contains('filming') && ap > 0.4 && ap < 0.6; }""", arg=i, timeout=30000)
+                except Exception:
+                    raise Check(f"{t['id']}: picture {i + 1} did not start to paint itself: {fig.get_attribute('class')}")
+                half = fig.evaluate(
+                    """f => { const c = f.querySelector('canvas');
+                         return { ap: parseFloat(getComputedStyle(f).getPropertyValue('--ap')), still: getComputedStyle(f.querySelector('img')).opacity,
+                                  film: getComputedStyle(c).opacity, width: c.width }; }"""
+                )
+                expect(0.4 < half["ap"] < 0.6 and half["width"] > 0, f"{t['id']}: picture {i + 1} half way: {half}")
+                page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", max(0, top - screen * 0.2))
+                page.wait_for_function("i => document.querySelectorAll('.venue-art.has-film')[i].classList.contains('done')", arg=i, timeout=5000)
+                page.wait_for_timeout(900)
+                expect(fig.evaluate("f => getComputedStyle(f.querySelector('img')).opacity") == "1", f"{t['id']}: picture {i + 1} is not finished when it has arrived")
+            seen.append(f"{t['id']} (hero{' and ' + str(figures) + ' pictures' if figures else ''})" if t["heroSeq"] else f"{t['id']} ({figures} pictures)")
+            page.close()
+            self.no_errors(f"scroll {t['id']}")
+        expect(seen, "no theme has a picture that follows the scroll")
+        return ", ".join(seen)
 
     def test_seal(self):
         coded = [t for t in self.themes() if not t["film"]]

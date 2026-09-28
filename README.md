@@ -1,6 +1,6 @@
 # Fira
 
-Animated digital invitations. A guest gets a link, sees a sealed envelope addressed to them, taps it, and a short film opens it into a scrolling story: the day, the place, the programme, dress code, gifts, menu, where to stay, and an RSVP that lands on the host's private dashboard. No app, no account for guests.
+Animated digital invitations. A guest gets a link, sees a sealed envelope addressed to them, taps it, and in one shot the envelope opens into the first picture of a scrolling story: the day, the place, the programme, dress code, gifts, menu, where to stay, and an RSVP that lands on the host's private dashboard. No app, no account for guests.
 
 **Live:** https://hampus-gstack.github.io/fira/
 
@@ -9,10 +9,10 @@ Animated digital invitations. A guest gets a link, sees a sealed envelope addres
 | Path | What |
 |---|---|
 | `site/` | The whole frontend. Static HTML, CSS and vanilla JavaScript, no build step. |
-| `site/js/invite-core.js` | The invitation engine: envelope, film, chapters, RSVP. |
+| `site/js/invite-core.js` | The invitation engine: envelope, opening film, the hero and the pictures that follow the scroll, chapters, RSVP. |
 | `site/js/templates.js` | Theme registry (identity, labels, chapter order, art) and sample data. |
 | `site/css/invite.css` | Engine styles and one block per theme. |
-| `site/js/scrollfilm.js` | A film cut into frames, drawn on a canvas at the position the page asks for. Frames load coarse to fine. |
+| `site/js/scrollfilm.js` | A film cut into frames, drawn on a canvas at the position the page asks for. Frames load coarse to fine. Used by the invitation and by the landing page. |
 | `site/js/landing.js` | The landing page: the envelope film follows the scroll, then the live invitation inside the phone. |
 | `site/media/seq/<name>/` | A film as WebP frames with a `manifest.json` (frame count, brightness of each frame). |
 | `server/` | The API: FastAPI + SQLite. Invitations, RSVPs, uploaded photos, theme media. |
@@ -48,11 +48,30 @@ cd server && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 pip install playwright && playwright install chromium
 python tests/e2e.py                 # local site, live API
 python tests/e2e.py --base prod     # the deployed site
-python tests/e2e.py --only landing  # one group: pages, landing, film, seal, lang, flow
+python tests/e2e.py --only landing  # one group: pages, landing, film, scroll, seal, lang, flow
 python tests/shots.py --themes chateau,toscana   # review sheets of every chapter
+python tests/opening.py chateau --engine webkit  # an opening second by second, then the pictures under the scroll
 ```
 
 The suite publishes a real invitation through the editor, answers it as a guest, checks the dashboard, edits it and deletes it again.
+
+## How an opening works
+
+A theme with `opening.lands` opens in one shot. The story is built behind the sealed envelope. On the tap
+the film plays inside the first screen of the page, from the envelope to the hero picture. From `lands`
+seconds the names are written in, and when the film ends a loop of the same view takes over on the same
+frame. While the guest scrolls on, the hero stays in place and `opening.heroSeq` (a film as frames) follows
+the scroll. Further down, a picture made with `figure(src, { film })` paints itself as it arrives.
+
+| `opening` field | Meaning |
+|---|---|
+| `poster`, `video`, `videoLight` | The film's first frame, the film, and a 720p version for slow connections |
+| `lands` | The second from which the names may arrive. Without it the film plays over the page and fades |
+| `hero`, `heroVideo` | The picture the film lands on, and a loop of it |
+| `heroSeq`, `pin` | A folder of frames (`media/seq/<name>/`) and for how many screens of scroll the hero is held |
+
+On screens wider than they are high the hero is a portrait card. With reduced motion there is no envelope
+and nothing follows the scroll: the page is a still page.
 
 ## Add a theme
 

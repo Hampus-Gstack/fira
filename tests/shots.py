@@ -86,7 +86,7 @@ def main():
             page.goto(f"{base}/i.html?demo={theme['id']}&to={quote(args.guest)}")
             page.wait_for_selector(".env4-tap, .env3-seal")
             if theme["film"]:
-                page.wait_for_function("document.querySelector('.env4-film').readyState >= 3", timeout=45000)
+                page.wait_for_function("document.querySelector('.hero-film, .env4-film').readyState >= 3", timeout=45000)
             page.wait_for_timeout(2800)
             shot("sealed")
             if theme["film"] and args.film:

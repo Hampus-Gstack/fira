@@ -237,19 +237,66 @@
     }, { passive: true });
   }
 
-  // ---------- scroll-story engine: every chapter gets --p, 0 entering, 1 leaving ----------
+  // ---------- scroll-story engine ----------
+  // Every chapter gets --p (0 entering, 1 leaving). A staged hero gets --pin-p (0 to 1 while it is held
+  // in place), every picture gets --ap (0 as it enters at the bottom of the screen, 1 once it has
+  // arrived), and the films in both (scrollfilm.js) show the frame that belongs to that number.
   function storyEngine(root) {
     if (window.__firaStoryCleanup) window.__firaStoryCleanup();
     const chapters = [...root.querySelectorAll(".ch")];
     const bar = root.querySelector(".story-progress i");
+    const hero = root.querySelector(".ch-hero.hero-staged");
+    const heroCanvas = hero && hero.querySelector(".hero-seq-film");
+    const heroLoop = hero && hero.querySelector(".hero-video");
+    const arts = [...root.querySelectorAll(".venue-art")];
+    const Film = REDUCED ? null : window.FiraScrollFilm;
+    const films = new Map();
+    const clamp = (v) => Math.max(0, Math.min(1, v));
     let ticking = false;
+
+    function start(canvas) {                     // fetch a film's frames, once
+      if (!canvas || films.has(canvas)) return;
+      const owner = canvas.closest(".venue-art, .ch-hero");
+      if (!Film) { owner.classList.add("nofilm"); return; }
+      const film = new Film(canvas, canvas.dataset.seq, { concurrency: 3 });
+      films.set(canvas, film);
+      film.resize();
+      film.load().then(() => { film.resize(); update(); }).catch(() => owner.classList.add("nofilm"));
+    }
+
     function update() {
       ticking = false;
       const vh = innerHeight;
       for (const ch of chapters) {
         const r = ch.getBoundingClientRect();
-        const p = Math.max(0, Math.min(1, (vh - r.top) / (vh + r.height)));
+        const p = clamp((vh - r.top) / (vh + r.height));
         ch.style.setProperty("--p", p.toFixed(4));
+      }
+      if (hero) {
+        const r = hero.getBoundingClientRect();
+        const range = r.height - vh;
+        const pin = range > 1 ? clamp(-r.top / range) : 0;
+        hero.style.setProperty("--pin-p", pin.toFixed(4));
+        const film = films.get(heroCanvas);
+        if (film && film.count) {
+          film.draw(pin * (film.count - 1));
+          const filming = pin > 0.004 && film.drawn >= 0;
+          hero.classList.toggle("filming", filming);
+          if (heroLoop && heroLoop.dataset.live) {      // the loop rests while the scroll film covers it
+            if (filming && !heroLoop.paused) heroLoop.pause();
+            else if (!filming && heroLoop.paused) { const p = heroLoop.play(); if (p && p.catch) p.catch(() => {}); }
+          }
+        }
+      }
+      for (const fig of arts) {
+        const r = fig.getBoundingClientRect();
+        if (r.bottom < -vh || r.top > vh * 2) continue;
+        const ap = REDUCED ? 1 : clamp((vh * 0.94 - r.top) / (vh * 0.62));
+        fig.style.setProperty("--ap", ap.toFixed(4));
+        const film = films.get(fig.querySelector(".art-film"));
+        if (film && film.count) film.draw(ap * (film.count - 1));
+        fig.classList.toggle("filming", !!film && film.drawn >= 0 && ap < 0.995);
+        fig.classList.toggle("done", ap >= 0.995);
       }
       if (bar) {
         const max = document.documentElement.scrollHeight - vh;
@@ -257,11 +304,25 @@
       }
     }
     const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    const onResize = () => { films.forEach((film) => film.resize()); update(); };
+
+    const near = new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (e.isIntersecting) { near.unobserve(e.target); start(e.target); }
+    }), { rootMargin: "150% 0px 150% 0px" });
+    root.querySelectorAll(".art-film").forEach((canvas) => near.observe(canvas));
+    root.querySelectorAll(".title-ink").forEach((ink) => ink.addEventListener("animationend", () => ink.classList.add("written")));
+    if (hero && heroCanvas) {
+      // While the opening film is still to be played, the hero's frames wait until it has started.
+      if (hero.classList.contains("held")) hero.addEventListener("fira:opening", () => start(heroCanvas), { once: true });
+      else start(heroCanvas);
+    }
+
     addEventListener("scroll", onScroll, { passive: true });
-    addEventListener("resize", update);
+    addEventListener("resize", onResize);
     window.__firaStoryCleanup = () => {
       removeEventListener("scroll", onScroll);
-      removeEventListener("resize", update);
+      removeEventListener("resize", onResize);
+      near.disconnect();
     };
     update();
   }
@@ -335,12 +396,28 @@
     return `<a class="inv-btn ghost" href="${ics}" download="fira-event.ics">${withSub ? `<b>${T("calendar")}</b><small>${T("calendarSub")}</small>` : T("calendar")}</a>`;
   };
 
+  // A picture in a chapter. With `film` (a folder of frames) it comes alive as the guest scrolls to it;
+  // with `reveal` it is uncovered by the scroll. Without either it is a still.
+  const artFigure = (src, o = {}) => {
+    const url = safeUrl(src);
+    if (!url) return "";
+    const film = safeUrl(o.film);
+    const shape = /^\d+(\.\d+)?\s*\/\s*\d+(\.\d+)?$/.test(o.ratio || "") ? ` style="aspect-ratio:${o.ratio}"` : "";
+    const cls = ["venue-art", "reveal", o.cls || "", film ? "has-film" : "", !film && o.reveal ? "art-" + String(o.reveal).replace(/[^a-z]/g, "") : ""];
+    return `<figure class="${cls.filter(Boolean).join(" ")}"${shape}><img src="${esc(url)}" alt="" loading="lazy">${
+      film ? `<canvas class="art-film" data-seq="${esc(film)}" aria-hidden="true"></canvas>` : ""}</figure>`;
+  };
+
   const CH = {
-    hero(data, theme) {
+    // A theme whose opening film lands on the hero picture (`opening.lands`), or whose hero follows the
+    // scroll (`opening.heroSeq`), gets a staged hero: one screen high, held in place while the page moves.
+    hero(data, theme, opts) {
       const o = theme.opening || {};
+      const staged = !!(o.lands || o.heroSeq);
+      const held = !!(opts && opts._held);
       let bg = "";
       if (o.heroVideo) {
-        bg = `<div class="hero-bg"><video class="hero-video" autoplay muted loop playsinline poster="${esc(o.hero || "")}"><source src="${esc(o.heroVideo)}" type="video/mp4"></video></div>`;
+        bg = `<div class="hero-bg"><video class="hero-video" ${held ? "" : 'autoplay data-live="1"'} muted loop playsinline preload="auto" poster="${esc(o.hero || "")}"><source src="${esc(o.heroVideo)}" type="video/mp4"></video></div>`;
       } else if (o.hero) {
         bg = `<div class="hero-bg"><img src="${esc(o.hero)}" alt=""></div>`;
       }
@@ -350,20 +427,27 @@
       const eyebrow = esc(data.eventType || word("eyebrow"));
       const showTime = data.time && !data.dateText;
       const dateLine = esc(longDate(data)) + (showTime ? " · " + esc(data.time) : "");
-      return `
-      <section class="ch ch-hero ${hasBg ? "has-bg" : ""} ${split ? "hero-split" : ""}" data-ch="hero">
-        ${bg}${hasBg ? '<div class="hero-scrim"></div>' : ""}
+      const seq = staged && o.heroSeq && !REDUCED ? `<canvas class="hero-seq-film" data-seq="${esc(o.heroSeq)}" aria-hidden="true"></canvas>` : "";
+      const side = (cls, url) => (safeUrl(url) ? `<div class="hero-side ${cls}" style="background-image:url(&quot;${esc(safeUrl(url))}&quot;)"></div>` : "");
+      const sides = staged ? side("hs-env", o.poster) + side("hs-pic", o.hero) : "";
+      const inside = `
+        ${sides}${bg}${seq}${hasBg ? '<div class="hero-scrim"></div>' : ""}
         ${theme.heroFrame ? `<div class="hero-frame" aria-hidden="true">${frameCorners()}</div>` : ""}
         <div class="ch-art">${art}</div>
         <div class="ch-inner">
           ${split ? `<div class="hero-top"><p class="inv-eyebrow hero-seq s1">${eyebrow}</p><p class="inv-date-short hero-seq s1">${esc(fmtShort(data.date))}</p></div>` : `<p class="inv-eyebrow hero-seq s1">${eyebrow}</p>`}
-          <h1 class="inv-title hero-seq s2 ${theme.titleCls || ""}" ${theme.titleAttr ? `data-text="${esc(data.title || "")}"` : ""}>${esc(data.title || "")}</h1>
+          <h1 class="inv-title hero-seq s2 ${theme.titleCls || ""}" ${theme.titleAttr ? `data-text="${esc(data.title || "")}"` : ""}>${staged ? `<span class="title-ink">${esc(data.title || "")}</span>` : esc(data.title || "")}</h1>
           ${data.subtitle ? `<p class="inv-subtitle hero-seq s3">${esc(data.subtitle)}</p>` : ""}
           <div class="hero-seq s4">${theme.art && theme.art.divider ? theme.art.divider : ""}</div>
           ${split ? "" : `<p class="inv-date hero-seq s5">${dateLine}</p>`}
           ${data.heroNote ? `<p class="inv-hero-note hero-seq s5">${esc(data.heroNote)}</p>` : ""}
         </div>
-        <div class="ch-chevron hero-seq s6" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 9l7 7 7-7"/></svg></div>
+        <div class="ch-chevron hero-seq s6" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 9l7 7 7-7"/></svg></div>`;
+      const pin = seq ? (Number(o.pin) > 0 ? Number(o.pin) : 1.1) : 0;
+      const cls = ["ch", "ch-hero", hasBg ? "has-bg" : "", split ? "hero-split" : "", staged ? "hero-staged" : "", held ? "held" : ""];
+      return `
+      <section class="${cls.filter(Boolean).join(" ")}" data-ch="hero"${staged ? ` style="--pin:${pin}"` : ""}>
+        ${staged ? `<div class="hero-stage">${inside}</div>` : inside}
       </section>`;
     },
 
@@ -426,11 +510,13 @@
     venue(data, theme) {
       if (!data.venue && !data.address) return "";
       const q = [data.venue, data.address].filter(Boolean).join(", ");
-      const art = safeUrl(data.venueImageUrl || (theme.assets && theme.assets.venue));
+      const own = safeUrl(data.venueImageUrl);
+      const assets = theme.assets || {};
+      const art = own ? artFigure(own) : artFigure(assets.venue, { film: assets.venueFilm, reveal: assets.venueReveal });
       return `
       <section class="ch ch-venue" data-ch="venue">
         <div class="ch-inner">
-          ${art ? `<figure class="venue-art reveal"><img src="${esc(art)}" alt="" loading="lazy"></figure>` : ""}
+          ${art}
           ${h2(word("venue"))}
           ${data.venue ? `<p class="inv-venue reveal">${esc(data.venue)}</p>` : ""}
           ${data.address ? `<p class="inv-address reveal">${esc(data.address)}</p>` : ""}
@@ -450,7 +536,7 @@
       const image = photoSrc(p.photoId || p.imageUrl);
       const art = image
         ? `<figure class="venue-art reveal"><img src="${esc(image)}" alt="" loading="lazy"></figure>`
-        : (theme.art && theme.art.place ? theme.art.place(p, index) : "");
+        : (theme.art && theme.art.place ? theme.art.place(p, index, artFigure) : "");
       return `
       <section class="ch ch-place place-${index}" data-ch="place">
         <div class="ch-inner">
@@ -855,7 +941,7 @@
     const o = theme.opening;
     const sp = o.sealPos || { x: 50, y: 50 };
     const mono = o.monogram === false ? "" :
-      `<div class="env4-mono" style="left:${Number(sp.x) || 50}%;top:${Number(sp.y) || 50}%;--seal-w:${Number(o.sealSize) || 24}vw">${esc(monogram(data))}</div>`;
+      `<div class="env4-mono" style="left:${Number(sp.x) || 50}%;top:${Number(sp.y) || 50}%;--seal-k:${(Number(o.sealSize) || 24) / 100}">${esc(monogram(data))}</div>`;
     const env = document.createElement("div");
     env.className = "env4";
     env.innerHTML = `
@@ -892,6 +978,120 @@
       film.addEventListener("error", finish);
       setTimeout(finish, 12000);
     };
+    env.querySelector(".env4-tap").addEventListener("click", open);
+    soundState.bind(film);
+    return env;
+  }
+
+  // Undoes what a sealed envelope did to the page. render() calls it, so a preview that is drawn again
+  // while an envelope is still sealed does not leave the page locked.
+  let unseal = null;
+
+  // Which film to play. A slow connection gets the lighter one (`opening.videoLight`). Browsers that do
+  // not say how fast they are connected are judged by how long the picture of the envelope took to arrive.
+  function pickFilm(o) {
+    if (!o.videoLight) return Promise.resolve(o.video);
+    const c = navigator.connection || {};
+    if (c.saveData || (c.downlink > 0 && c.downlink < 5) || /(^|-)(2g|3g)$/.test(c.effectiveType || "")) return Promise.resolve(o.videoLight);
+    if (c.downlink > 0) return Promise.resolve(o.video);
+    return new Promise((resolve) => {
+      const img = new Image();
+      let timer = 0;
+      const done = (src) => { clearTimeout(timer); resolve(src); };
+      timer = setTimeout(() => done(o.videoLight), 2500);        // still on its way: slow
+      img.onload = () => {
+        const e = (performance.getEntriesByName(img.src) || []).pop();
+        const bytes = e ? (e.transferSize || 0) : 0, ms = e ? e.responseEnd - e.requestStart : 0;
+        done(bytes > 20000 && ms > 0 && bytes * 8 / ms < 5000 ? o.videoLight : o.video);   // under 5 Mbit/s
+      };
+      img.onerror = () => done(o.video);
+      img.src = o.poster;
+    });
+  }
+
+  // The film lands on the hero: it runs from the sealed envelope to the first picture of the page, so
+  // it plays inside the hero itself. The names arrive while it settles (`opening.lands`, in seconds),
+  // and when it ends the hero's own loop takes over on the same frame. Nothing is cut or faded across.
+  function landingOpening(stage, data, theme, opts, onSettled) {
+    const o = theme.opening;
+    const hero = stage.querySelector(".ch-hero");
+    const heroStage = hero.querySelector(".hero-stage");
+    const loop = hero.querySelector(".hero-video");
+    const sp = o.sealPos || { x: 50, y: 50 };
+    const film = document.createElement("video");
+    film.className = "hero-film";
+    film.setAttribute("playsinline", "");
+    film.playsInline = true;
+    film.muted = true;
+    film.preload = "auto";
+    film.poster = o.poster;
+    heroStage.insertBefore(film, heroStage.querySelector(".hero-scrim"));
+    let wanted = false;                            // a tap that came before the film was chosen
+    pickFilm(o).then((src) => { film.src = src; film.load(); if (wanted) open(); });
+
+    const env = document.createElement("div");
+    env.className = "env4 env4-clear";            // no picture of its own: the hero behind it is the envelope
+    env.innerHTML = `
+      <div class="env4-scrim"></div>
+      <p class="env4-addr">${address(data, opts)}</p>
+      ${o.monogram === false ? "" : `<div class="env4-mono" style="left:${Number(sp.x) || 50}%;top:${Number(sp.y) || 50}%;--seal-k:${(Number(o.sealSize) || 24) / 100}">${esc(monogram(data))}</div>`}
+      <p class="env4-sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>${T("soundHint")}</p>
+      <p class="env4-hint">${T("tapToOpen")}</p>
+      <button class="env4-tap" aria-label="${T("openInvitation")}"></button>`;
+    stage.appendChild(env);
+    const page = document.documentElement;
+    page.classList.add("sealed");                  // the page does not scroll until the envelope has opened
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";   // a reload starts at the envelope
+    const stay = () => { if (window.scrollY) window.scrollTo(0, 0); };
+    addEventListener("scroll", stay, { passive: true });
+    stay();
+    unseal = () => { removeEventListener("scroll", stay); page.classList.remove("sealed"); unseal = null; };
+
+    let opened = false, released = false, settled = false;
+    const release = () => {                        // the names arrive
+      if (released) return;
+      released = true;
+      hero.classList.remove("held");
+    };
+    const settle = () => {                         // the film has landed: the page is open
+      if (settled) return;
+      settled = true;
+      release();
+      if (loop) {
+        try { loop.currentTime = 0; } catch (e) { /* not loaded yet: it starts from its poster */ }
+        loop.dataset.live = "1";
+        const p = loop.play();
+        if (p && p.catch) p.catch(() => {});
+      }
+      film.classList.add("done");
+      env.remove();
+      if (unseal) unseal();
+      if (soundState.btn) soundState.btn.remove();   // the film was the only thing with sound
+      setTimeout(() => film.remove(), 900);
+      onSettled();
+    };
+    function open() {
+      if (opened) return;
+      if (!film.getAttribute("src")) { wanted = true; return; }   // it opens as soon as the film is chosen
+      opened = true;
+      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
+      if (!opts.noFullscreen) tryFullscreen();
+      env.classList.add("opening");
+      hero.dispatchEvent(new Event("fira:opening"));
+      film.muted = !!opts.startMuted;
+      soundState.set(!film.muted);
+      const p = film.play();
+      if (p && p.catch) p.catch(() => { film.muted = true; soundState.set(false); film.play().catch(settle); });
+      const watch = () => {
+        if (settled) return;
+        if (film.currentTime >= Number(o.lands)) release();
+        requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+      film.addEventListener("ended", settle);
+      film.addEventListener("error", settle);
+      setTimeout(settle, 15000);
+    }
     env.querySelector(".env4-tap").addEventListener("click", open);
     soundState.bind(film);
     return env;
@@ -940,6 +1140,7 @@
   function render(data, mount, opts = {}) {
     const theme = window.FIRA_TEMPLATES[data.template] || window.FIRA_TEMPLATES.botanical;
     buildLabels(data, theme);
+    if (unseal) unseal();
     mount.innerHTML = "";
     document.querySelectorAll(".cta-pill, .fs-toggle, .snd-toggle, .celebrate-canvas").forEach((el) => el.remove());
     soundState.reset();
@@ -958,19 +1159,25 @@
     stage.className = "inv-stage";
     mount.appendChild(stage);
 
-    const showStory = () => {
-      if (stage.querySelector(".story")) return;
+    const o = theme.opening || {};
+    const film = !!(o.video && !opts.noFilm) && !opts.skipEnvelope && !REDUCED;
+    const lands = film && Number(o.lands) > 0;      // the film ends on the hero picture and plays inside it
+
+    // `held`: the story is built behind the sealed envelope and waits there until the film has landed.
+    const showStory = (held) => {
+      if (stage.querySelector(".story")) return () => {};
       if (theme.decorate) theme.decorate(stage, U);
       parallax(stage);
       const wrap = document.createElement("div");
       wrap.className = "story";
       const order = (Array.isArray(data.chapters) && data.chapters.length ? data.chapters : theme.chapters) || DEFAULT_ORDER;
+      const chapterOpts = Object.assign({}, opts, { _held: !!held });
       wrap.innerHTML = `
         ${theme.storyBg ? `<div class="story-bg" aria-hidden="true"><img src="${esc(theme.storyBg)}" alt=""></div>` : ""}
         <div class="story-progress" aria-hidden="true"><i></i></div>
         ${order.map((name) => {
           const [kind, arg] = String(name).split(":");
-          return CH[kind] ? CH[kind](data, theme, opts, arg) : "";
+          return CH[kind] ? CH[kind](data, theme, chapterOpts, arg) : "";
         }).join("")}
         <footer class="story-foot"><a class="inv-fira" href="index.html" target="_blank" rel="noopener">${T("madeWith")}</a></footer>`;
       stage.appendChild(wrap);
@@ -981,7 +1188,13 @@
       revealOnScroll(wrap);
       storyEngine(wrap);
       if (theme.after) theme.after(wrap, data, opts, U);
+      const chrome = () => addChrome(wrap);
+      if (!held) chrome();
+      return chrome;
+    };
 
+    // The reply shortcut and the full-screen button: they belong to the open page.
+    const addChrome = (wrap) => {
       if (!opts.noRsvp && wrap.querySelector("#rsvp")) {
         const pill = document.createElement("button");
         pill.className = "cta-pill" + (theme.ctaStyle === "scroll" ? " cta-scroll" : "");
@@ -1006,12 +1219,16 @@
       }
     };
 
-    if (opts.skipEnvelope || REDUCED) { showStory(); return; }
-    if (theme.opening && theme.opening.video && !opts.noFilm) {
-      filmEnvelope(stage, data, theme, opts, showStory);
+    if (opts.skipEnvelope || REDUCED) { showStory(false); return; }
+    if (lands) {
+      const chrome = showStory(true);
+      landingOpening(stage, data, theme, opts, chrome);
+      soundToggle(stage);
+    } else if (film) {
+      filmEnvelope(stage, data, theme, opts, () => showStory(false));
       soundToggle(stage);
     } else {
-      envelope(stage, data, theme, opts, showStory);
+      envelope(stage, data, theme, opts, () => showStory(false));
     }
   }
 

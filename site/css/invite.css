@@ -27,8 +27,9 @@
   animation: hero-in 1.6s 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 .env4-mono {
-  position: absolute; z-index: 2; translate: -50% -50%; width: var(--seal-w, 24vw);
-  text-align: center; font-family: var(--t-display), serif; font-size: calc(var(--seal-w, 24vw) * 0.34);
+  --seal-w: calc(var(--stage-w, 100vw) * var(--seal-k, 0.24));   /* a share of the picture's width */
+  position: absolute; z-index: 2; translate: -50% -50%; width: var(--seal-w);
+  text-align: center; font-family: var(--t-display), serif; font-size: calc(var(--seal-w) * 0.34);
   line-height: 1; color: var(--t-seal-ink, #6A4A3A); opacity: 0.85; pointer-events: none;
   text-shadow: 0 1px 0 rgba(255,255,255,0.45), 0 -1px 0 rgba(0,0,0,0.15);
   animation: hero-in 1.4s 0.9s ease both;
@@ -127,14 +128,14 @@
 .ch-art { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 
 /* hero */
-.hero-seq { opacity: 0; transform: translateY(22px); animation: hero-in 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+.hero-seq { animation: hero-in 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .hero-seq.s1 { animation-delay: 0.45s; }
 .hero-seq.s2 { animation-delay: 1.0s; animation-duration: 1.7s; }
 .hero-seq.s3 { animation-delay: 1.7s; }
 .hero-seq.s4 { animation-delay: 2.1s; }
 .hero-seq.s5 { animation-delay: 2.4s; }
 .hero-seq.s6 { animation-delay: 3.1s; }
-@keyframes hero-in { to { opacity: 1; transform: none; } }
+@keyframes hero-in { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
 .hero-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
 .hero-bg img, .hero-bg video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hero-bg img { animation: kenburns 28s ease-in-out infinite alternate; }
@@ -197,8 +198,8 @@
 /* details / venue */
 .map-card { margin: 30px auto 0; max-width: 480px; border-radius: 14px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--t-ink) 22%, transparent); box-shadow: 0 18px 44px rgba(0,0,0,0.16); }
 .map-card iframe { display: block; width: 100%; height: 240px; border: 0; filter: var(--t-map-filter, none); }
-.venue-art { margin: 0 auto 10px; max-width: 420px; }
-.venue-art img { width: 100%; display: block; mix-blend-mode: var(--t-venue-blend, normal); }
+.venue-art { margin: 0 auto 10px; max-width: 420px; mix-blend-mode: var(--t-venue-blend, normal); }
+.venue-art img { width: 100%; display: block; }
 .inv-cta { display: flex; gap: 12px; justify-content: center; margin-top: 26px; flex-wrap: wrap; }
 .inv-btn { display: inline-block; padding: 11px 22px; border-radius: 999px; border: 1px solid var(--t-accent); color: var(--t-ink); text-decoration: none; font-size: 14px; letter-spacing: 0.04em; transition: transform 0.25s, background 0.25s, color 0.25s; }
 .inv-btn b { display: block; font-weight: 600; font-size: 15px; }
@@ -507,34 +508,11 @@
   --t-display: "Great Vibes"; --t-body: "EB Garamond"; --t-display-weight: 400; --t-sub-style: normal;
   --t-env-addr: #5E3A31; --t-env-addr-shadow: 0 0 14px rgba(255,255,255,0.95), 0 0 4px rgba(255,255,255,0.9);
   --t-addr-style: normal; --t-addr-size: clamp(30px, 7.6vw, 46px); --t-seal-ink: #7A5A3E; --t-hint-size: 17px;
-  --t-env-hint: #FFFDF7; --t-env-hint-shadow: 0 1px 4px rgba(0,0,0,0.75);
+  --t-env-hint: #5E3A31; --t-env-hint-shadow: 0 0 12px rgba(255,255,255,0.95), 0 0 3px rgba(255,255,255,0.9);
   --t-chevron: var(--ag-gold); --t-msg-font: "EB Garamond"; --t-msg-size: 20px; --t-cd-font: "EB Garamond"; --t-tl-font: "EB Garamond";
-  --ag-lamp: min(86vw, 400px, 46vh);
 }
 .theme-agapi .inv-stage { background: var(--ag-ivory); font-size: 18px; }
 
-/* hero: the lamps light up, then the names */
-.theme-agapi .ch-hero {
-  padding-top: 0; place-items: start center;
-  background: radial-gradient(ellipse 85% 46% at 50% 17%, #FFF3D2 0%, rgba(255,243,210,0) 72%), var(--ag-ivory);
-}
-.theme-agapi .ch-hero .ch-inner { margin-top: calc(var(--ag-lamp) * 1.17); padding-bottom: 20vh; }
-.ag-chandelier { position: absolute; top: -4px; left: 50%; width: var(--ag-lamp); margin-left: calc(var(--ag-lamp) / -2); color: var(--ag-gold); overflow: visible; }
-.ag-chandelier .draw { stroke-dasharray: 420; stroke-dashoffset: 420; animation: bt-draw 1.7s calc(0.2s + var(--i, 0) * 0.3s) ease forwards; }
-.ag-chandelier .ag-candles rect { fill: #FFFDF5; stroke: var(--ag-gold); stroke-width: 1; }
-.ag-chandelier .flame {
-  fill: #FFD27A; opacity: 0; transform-box: fill-box; transform-origin: 50% 100%;
-  filter: drop-shadow(0 0 5px #FFC861) drop-shadow(0 0 12px rgba(255,190,80,0.7));
-  animation: ag-light 0.7s calc(1.5s + var(--t, 0) * 0.45s) ease forwards, ag-flicker 2.6s calc(2.6s + var(--d, 0s)) ease-in-out infinite;
-}
-.ag-chandelier .ag-glow { opacity: 0; animation: ag-light 2.2s 2.2s ease forwards; }
-@keyframes ag-light { to { opacity: 1; } }
-@keyframes ag-flicker { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.1, 1.18); } 70% { transform: scale(0.95, 0.92); } }
-.ag-olive { position: absolute; bottom: 11vh; width: min(37vw, 200px); color: var(--ag-olive); opacity: 0.85; }
-.ag-chandelier .ag-chains { opacity: 0.75; }
-.ag-olive.l { left: -22px; }
-.ag-olive.r { right: -22px; transform: scaleX(-1); }
-.ag-olive .ag-olives { fill: #5E6B3E; }
 .theme-agapi .inv-eyebrow { font-size: 14px; letter-spacing: 0.36em; color: #96752A; opacity: 1; margin-bottom: 14px; }
 .theme-agapi .inv-title { font-size: clamp(60px, 15.5vw, 112px); line-height: 1; margin-bottom: 6px; color: var(--ag-blue); }
 .theme-agapi .inv-date { font-family: "EB Garamond", serif; font-size: clamp(15px, 4.1vw, 19px); letter-spacing: 0.13em; text-transform: uppercase; text-wrap: balance; margin-top: 16px; }
@@ -572,12 +550,6 @@
 .theme-agapi .cd-num { font-size: 42px; }
 .theme-agapi .cd-colon { font-size: 34px; color: var(--ag-gold-soft); }
 .theme-agapi .cd-lbl { letter-spacing: 0.22em; }
-.ag-church { display: block; width: min(80vw, 340px); margin: 0 auto 22px; color: var(--ag-blue); }
-.ag-church .roof { stroke: var(--ag-terra); fill: color-mix(in srgb, var(--ag-terra) 16%, transparent); }
-.ag-sprigs { position: relative; width: 190px; height: 70px; margin: 0 auto 14px; }
-.ag-sprigs .ag-olive { position: absolute; bottom: 0; width: 112px; opacity: 1; }
-.ag-sprigs .ag-olive.l { left: -4px; }
-.ag-sprigs .ag-olive.r { right: -4px; }
 .theme-agapi .inv-btn { font-family: "EB Garamond", serif; font-size: 16px; border-color: color-mix(in srgb, var(--t-accent) 80%, transparent); background: color-mix(in srgb, #fff 55%, transparent); border-radius: 14px; text-align: left; padding: 10px 18px; }
 .theme-agapi .inv-btn:hover { background: var(--ag-blue); border-color: var(--ag-blue); color: #fff; }
 .theme-agapi .music-play { background: var(--ag-blue); color: #fff; }
@@ -709,9 +681,148 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .fx-layer i, .cf-balloon, .ms-rays, .ms-ribbons .rb, .bl-mobile .swing, .nx-eq i, .nx-glitch::before, .nx-glitch::after,
-  .nr-shimmer, .env3-seal, .ch-chevron svg, .hero-bg img, .cta-scroll .mouse::after, .ag-chandelier .draw { animation: none; }
-  .ag-chandelier .draw { stroke-dashoffset: 0; }
-  .ag-chandelier .flame, .ag-chandelier .ag-glow { animation: none; opacity: 1; }
+  .nr-shimmer, .env3-seal, .ch-chevron svg, .hero-bg img, .cta-scroll .mouse::after { animation: none; }
   .reveal, .hero-seq { transition: none; animation: none; opacity: 1; transform: none; }
   .ph-frame img, .tl-line { transition: none; transform: none; }
+}
+
+/* ================= the film lands on the page; pictures follow the scroll ================= */
+/* A staged hero is one screen high and stays in place while the page moves (--pin screens of scroll).
+   The opening film plays inside it, so the envelope, the film and the first picture share one frame. */
+.inv-root .ch-hero.hero-staged {
+  display: block; place-items: normal; min-height: 0; padding: 0; overflow: visible; background: none;
+  height: calc(100vh + var(--pin, 0) * 100vh); height: calc(100dvh + var(--pin, 0) * 100vh);
+}
+/* width and justify-self: a browser that aligns blocks (Safari 26) would shrink the stage to its text */
+.hero-stage {
+  position: sticky; top: 0; width: 100%; justify-self: stretch; height: 100vh; height: 100dvh;
+  overflow: hidden; box-sizing: border-box;
+  display: grid; place-items: center; padding: 12vh 0; background: var(--t-bg);
+}
+.hero-staged .hero-scrim { z-index: 2; transition: opacity 1.4s ease; }
+.hero-staged .hero-frame { transition: opacity 1.4s ease; }
+.hero-film {
+  position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: opacity 0.5s ease;
+}
+.hero-film.done { opacity: 0; pointer-events: none; }
+.hero-seq-film { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.35s ease; }
+.ch-hero.filming .hero-seq-film { opacity: 1; }
+/* while the page scrolls under the held hero, its words step back (filter: their own entrance owns `opacity`) */
+.hero-staged .ch-inner, .hero-staged .ch-chevron {
+  filter: opacity(clamp(0, calc(1 - var(--pin-p, 0) * 3.4), 1));
+  translate: 0 calc(var(--pin-p, 0) * -64px);
+}
+/* The names are written from left to right. A mask cuts what reaches outside its box, and a script
+   reaches far, so the ink has a box of its own that is wider than the line (the margins take it back).
+   `written` (set when the writing is done) lifts the mask. */
+.title-ink {
+  display: inline-block; padding: 0.4em 0.5em; margin: -0.4em -0.5em;
+  -webkit-mask-image: linear-gradient(100deg, #000 0%, #000 44%, transparent 56%, transparent 100%);
+  mask-image: linear-gradient(100deg, #000 0%, #000 44%, transparent 56%, transparent 100%);
+  -webkit-mask-size: 260% 100%; mask-size: 260% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  animation: title-write 2.3s cubic-bezier(0.45, 0.05, 0.3, 1) 0.5s both;
+}
+.hero-staged .hero-seq.s2 { animation-delay: 0.5s; animation-duration: 1.2s; }
+.title-ink.written { -webkit-mask-image: none; mask-image: none; animation: none; }
+.ch-hero.held .title-ink { animation-play-state: paused; }
+@keyframes title-write {
+  from { -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+  to { -webkit-mask-position: 0% 0; mask-position: 0% 0; }
+}
+/* sealed: the story is built behind the envelope and waits */
+.ch-hero.held .hero-seq { animation-play-state: paused; }
+.ch-hero.held .ch-inner, .ch-hero.held .ch-chevron { visibility: hidden; }   /* some themes give their eyebrow an opacity of its own */
+.ch-hero.held .hero-scrim, .ch-hero.held .hero-frame, .ch-hero.held .ch-art { opacity: 0; }
+.env4.env4-clear { background: transparent; }
+html.sealed, html.sealed body { overflow: hidden; }
+html.sealed .env4 { touch-action: none; }
+
+/* a picture that paints itself as the guest scrolls to it */
+.ch-venue .ch-inner, .ch-place .ch-inner { z-index: auto; }   /* so `multiply` reaches the chapter's colour */
+.venue-art.has-film { position: relative; }
+.venue-art.has-film img { opacity: 0; transition: opacity 0.7s ease; }
+.venue-art.has-film.done img, .venue-art.has-film.nofilm img { opacity: 1; }
+.art-film { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.5s ease; }
+.venue-art.filming .art-film { opacity: 1; }
+/* A picture uncovered by the scroll, as if drawn from one side to the other. Its edges fade into the page.
+   Both masks are on the figure, which is also what blends: a mask on the picture inside would make
+   the picture a layer of its own, and a layer does not blend with the page behind it. */
+.venue-art.art-wipe {
+  -webkit-mask-image: linear-gradient(100deg, #000 calc(var(--ap, 1) * 135% - 35%), transparent calc(var(--ap, 1) * 135%)),
+    linear-gradient(to right, transparent 0, #000 9%, #000 91%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 6%, #000 86%, transparent 100%);
+  mask-image: linear-gradient(100deg, #000 calc(var(--ap, 1) * 135% - 35%), transparent calc(var(--ap, 1) * 135%)),
+    linear-gradient(to right, transparent 0, #000 9%, #000 91%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 6%, #000 86%, transparent 100%);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+/* a band of flowers that grows in as the chapter arrives (themes set the pictures) */
+.band-film { position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none; }
+.band-film canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.5s ease; }
+.band-film.filming canvas, .band-film.done canvas { opacity: 1; }
+
+/* Château */
+.theme-chateau .hero-stage { padding: 14vh 0 12vh; }
+
+/* Agápi: the lamp of the church, the names in the light below it */
+.theme-agapi .hero-stage { place-items: start center; padding: 0; }
+.theme-agapi .hero-staged .ch-inner { margin-top: 50vh; margin-top: 50dvh; padding-bottom: 0; }
+.theme-agapi .hero-staged { --t-hero-ink: var(--ag-blue); --t-hero-title-shadow: 0 0 22px rgba(255, 248, 232, 0.9); }
+.theme-agapi .hero-staged .hero-scrim { background: linear-gradient(180deg, transparent 38%, rgba(251, 243, 226, 0.55) 56%, rgba(251, 243, 226, 0.7) 100%); }
+.theme-agapi .hero-staged .inv-eyebrow, .theme-agapi .hero-staged .inv-hero-note { color: #7A5C1E; }
+/* While the hero is held, the page rises into it from below: ivory climbs the screen and the lamp is
+   the last thing to leave. The chapter that follows is ivory too, so there is no edge between them. */
+.theme-agapi .hero-stage::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(to top, var(--ag-ivory) 0%, var(--ag-ivory) calc(var(--pin-p, 0) * 56%), rgba(251, 247, 238, 0) calc(var(--pin-p, 0) * 56% + 46%));
+  opacity: clamp(0, calc(var(--pin-p, 0) * 2.6), 1);
+}
+/* the envelope is light: what is written on it is dark, with light behind it */
+.theme-agapi .env4-scrim { background: linear-gradient(180deg, rgba(255, 252, 245, 0.45) 0%, rgba(255, 252, 245, 0) 27%, rgba(255, 252, 245, 0) 74%, rgba(255, 252, 245, 0.55) 100%); }
+.theme-agapi .env4-mono { color: #EBD9A2; text-shadow: 0 1px 2px rgba(10, 20, 50, 0.55); opacity: 0.95; }
+.theme-agapi .venue-art { --t-venue-blend: multiply; max-width: 460px; }
+/* the sheet of paper has no edge: the painting fades into the page on all four sides */
+.theme-agapi .venue-art.has-film {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+.theme-agapi .band-b .venue-art, .theme-agapi .band-a .venue-art { margin-bottom: 18px; }
+
+/* Wide screens: the films are portrait, so the hero is a portrait card in the middle of the screen.
+   Beside it is the same picture out of focus: the envelope while it is sealed, then the view it opens to. */
+.hero-side { display: none; }
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  .hero-staged, .env4-clear { --stage-w: calc(100vh * 0.5625); }
+  .hero-side {
+    display: block; position: absolute; inset: -9%; z-index: 0; pointer-events: none;
+    background-size: cover; background-position: center;
+    filter: blur(42px) saturate(1.1) brightness(0.62); transition: opacity 1.8s ease;
+  }
+  .hero-side.hs-env { opacity: 0; }
+  .ch-hero.held .hero-side.hs-env { opacity: 1; }
+  .ch-hero.held .hero-side.hs-pic { opacity: 0; }
+  .hero-stage > .hero-bg, .hero-stage > .hero-film, .hero-stage > .hero-seq-film,
+  .hero-stage > .hero-scrim, .hero-stage > .hero-frame {
+    left: 50%; right: auto; width: var(--stage-w); margin-left: calc(var(--stage-w) / -2);
+  }
+  .hero-stage > .hero-bg { box-shadow: 0 0 140px 30px rgba(0, 0, 0, 0.42); }
+  .hero-staged .ch-inner { max-width: var(--stage-w); }
+  .env4-clear .env4-scrim {
+    left: 50%; right: auto; width: var(--stage-w); margin-left: calc(var(--stage-w) / -2);
+  }
+  .env4-clear .env4-addr, .env4-clear .env4-hint { left: 50%; right: auto; width: var(--stage-w); margin-left: calc(var(--stage-w) / -2); box-sizing: border-box; }
+  /* the page that follows is as wide as the screen: at the end of its hold the card has become the page */
+  .hero-stage::before {
+    content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: var(--t-bg);
+    opacity: clamp(0, calc((var(--pin-p, 0) - 0.62) * 2.7), 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-staged .ch-inner, .hero-staged .ch-chevron { filter: none; translate: none; }
+  .title-ink { -webkit-mask-image: none; mask-image: none; animation: none; }
+  .venue-art.has-film img { opacity: 1; transition: none; }
+  .venue-art.art-wipe { -webkit-mask-image: none; mask-image: none; }
+  .theme-agapi .hero-stage::after { display: none; }
 }

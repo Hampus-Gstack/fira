@@ -87,8 +87,10 @@
     const film = new window.FiraScrollFilm(canvas, root.dataset.film);
 
     // Beats: 0 is the top of the page, 1 is the first caption at rest, 2 the second, and so on.
-    const FILM = through([[0.05, 0], [1, 0.34], [2, 0.8], [2.6, 1]]);     // how far the film has run
-    const FADE = through([[2.6, 0], [3, 1]]);                             // 0 the film, 1 the invitation
+    // The film runs from the sealed envelope to the first picture of the invitation, so the hand-over
+    // to the live invitation in the phone is a fade between two equal pictures.
+    const FILM = through([[0.05, 0], [1, 0.3], [2, 0.56], [2.85, 1]]);    // how far the film has run
+    const FADE = through([[2.9, 0], [3.2, 1]]);                           // 0 the film, 1 the invitation
 
     let anchors = [0, 1];
     let rail = { top: 0, height: 1 };
@@ -196,8 +198,9 @@
       root.classList.toggle("film-running", index >= 0 && p > 0.002);
       put(root, "--over", (1 - clamp((p - 0.02) / 0.1)).toFixed(3));
       put(root, "--fade", x.toFixed(3));
-      const light = index >= 0 ? clamp(((film.luma[index] || 0) - 0.27) / 0.5) : 0;
-      put(root, "--glow", (light * (1 - 0.75 * x)).toFixed(3));
+      // The light of the envelope spills onto the page; the daylight of the garden that follows does not.
+      const light = index >= 0 ? clamp(((film.luma[index] || 0) - 0.27) / 0.5) * (1 - clamp((p - 0.6) / 0.14)) : 0;
+      put(root, "--glow", light.toFixed(3));
       put(steps, "--run", clamp((window.scrollY + vh / 2 - rail.top) / rail.height).toFixed(4));
       // Wide: captions scroll past, so they fade as they near the edge. Narrow: a card rests at the bottom
       // of the screen for three quarters of its beat and is gone before the next one arrives.
