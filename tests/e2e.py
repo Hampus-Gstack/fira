@@ -412,7 +412,7 @@ class Suite:
             page.wait_for_function("!!(document.querySelector('.hero-film') || {}).currentSrc", timeout=20000)
             chosen = page.evaluate("document.querySelector('.hero-film').currentSrc.split('/').pop()")
             context.close()
-            expect(chosen.endswith("-light.mp4"), f"{theme}: a slow connection was given {chosen}")
+            expect(chosen.endswith("-small.mp4"), f"{theme}: a slow connection was given {chosen}")
             # drawn again while sealed (the editor does that): the page must not stay locked
             page = self.page()
             page.goto(self.url(f"i.html?demo={theme}"))
@@ -464,6 +464,12 @@ class Suite:
                 page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
                 page.wait_for_function("!document.querySelector('.ch-hero').classList.contains('filming')", timeout=5000)
             for i in range(figures):
+                # A page of its own, and one jump: the frames arrive after the scroll has stopped,
+                # as they do for a guest on a slow connection who scrolls and then waits.
+                page.close()
+                page = self.page()
+                page.goto(self.url(f"i.html?demo={t['id']}&embed=1"))
+                page.wait_for_selector(".story .ch-hero")
                 fig = page.locator(".venue-art.has-film").nth(i)
                 top = fig.evaluate("f => f.getBoundingClientRect().top + scrollY")
                 screen = page.evaluate("innerHeight")
@@ -474,7 +480,8 @@ class Suite:
                                   const ap = parseFloat(getComputedStyle(f).getPropertyValue('--ap'));
                                   return f.classList.contains('filming') && ap > 0.4 && ap < 0.6; }""", arg=i, timeout=30000)
                 except Exception:
-                    raise Check(f"{t['id']}: picture {i + 1} did not start to paint itself: {fig.get_attribute('class')}")
+                    seen_frames = fig.evaluate("f => f.querySelector('canvas').width")
+                    raise Check(f"{t['id']}: picture {i + 1} did not start to paint itself: {fig.get_attribute('class')} (canvas {seen_frames} px wide)")
                 half = fig.evaluate(
                     """f => { const c = f.querySelector('canvas');
                          return { ap: parseFloat(getComputedStyle(f).getPropertyValue('--ap')), still: getComputedStyle(f.querySelector('img')).opacity,

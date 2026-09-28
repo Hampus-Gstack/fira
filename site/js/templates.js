@@ -61,7 +61,7 @@
       // frame is the hero picture, where a loop of the same view takes over. `lands` is the second from
       // which the names may arrive; `videoLight` is played on slow connections; `heroSeq` follows the scroll.
       opening: {
-        poster: M + "env-chateau-v2.jpg", video: M + "open-chateau-v2.mp4", videoLight: M + "open-chateau-v2-light.mp4", lands: 5.9,
+        poster: M + "env-chateau-v2.jpg", video: M + "open-chateau-v2.mp4", videoLight: M + "open-chateau-v2-small.mp4", lands: 5.9,
         hero: M + "hero-chateau-v2.jpg", thumb: M + "thumb-chateau-v2.webp", heroVideo: M + "hero-chateau-v2.mp4",
         heroSeq: M + "seq/hero-chateau/", pin: 1,
         sealPos: { x: 50, y: 50 }, sealSize: 22,
@@ -123,7 +123,7 @@
       envTint: { paper: "#F4EEE2", flap: "#EBE0CB", seal: "#1F3559" },
       // An ivory envelope with a blue seal opens into the light of a church lamp.
       opening: {
-        poster: M + "env-agapi.jpg", video: M + "open-agapi.mp4", videoLight: M + "open-agapi-light.mp4", lands: 5.2,
+        poster: M + "env-agapi.jpg", video: M + "open-agapi.mp4", videoLight: M + "open-agapi-small.mp4", lands: 5.2,
         hero: M + "hero-agapi.jpg", thumb: M + "thumb-agapi.webp", heroVideo: M + "hero-agapi.mp4",
         heroSeq: M + "seq/hero-agapi/", pin: 1.1,
         sealPos: { x: 50, y: 50 }, sealSize: 21,

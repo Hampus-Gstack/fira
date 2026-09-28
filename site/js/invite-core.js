@@ -258,7 +258,8 @@
       if (!canvas || films.has(canvas)) return;
       const owner = canvas.closest(".venue-art, .ch-hero");
       if (!Film) { owner.classList.add("nofilm"); return; }
-      const film = new Film(canvas, canvas.dataset.seq, { concurrency: 3 });
+      // Frames arrive when they arrive: every one of them may be the first that can be shown.
+      const film = new Film(canvas, canvas.dataset.seq, { concurrency: 3, onprogress: onScroll });
       films.set(canvas, film);
       film.resize();
       film.load().then(() => { film.resize(); update(); }).catch(() => owner.classList.add("nofilm"));
@@ -312,8 +313,8 @@
     root.querySelectorAll(".art-film").forEach((canvas) => near.observe(canvas));
     root.querySelectorAll(".title-ink").forEach((ink) => ink.addEventListener("animationend", () => ink.classList.add("written")));
     if (hero && heroCanvas) {
-      // While the opening film is still to be played, the hero's frames wait until it has started.
-      if (hero.classList.contains("held")) hero.addEventListener("fira:opening", () => start(heroCanvas), { once: true });
+      // While the opening film is still to be played, the hero's frames wait: the film goes first.
+      if (hero.classList.contains("held")) hero.addEventListener("fira:fed", () => start(heroCanvas), { once: true });
       else start(heroCanvas);
     }
 
@@ -417,7 +418,7 @@
       const held = !!(opts && opts._held);
       let bg = "";
       if (o.heroVideo) {
-        bg = `<div class="hero-bg"><video class="hero-video" ${held ? "" : 'autoplay data-live="1"'} muted loop playsinline preload="auto" poster="${esc(o.hero || "")}"><source src="${esc(o.heroVideo)}" type="video/mp4"></video></div>`;
+        bg = `<div class="hero-bg"><video class="hero-video" ${held ? 'preload="none"' : 'autoplay data-live="1" preload="auto"'} muted loop playsinline poster="${esc(o.hero || "")}"><source src="${esc(o.heroVideo)}" type="video/mp4"></video></div>`;
       } else if (o.hero) {
         bg = `<div class="hero-bg"><img src="${esc(o.hero)}" alt=""></div>`;
       }
@@ -936,6 +937,29 @@
     stage.appendChild(b);
   }
 
+  // After the tap: play the film, with sound if the browser allows it. While the film is still on its
+  // way (a slow connection), the hint says so. `done` is called once: when the film has ended or failed,
+  // a while after it should have ended, or when it never started.
+  function playFilm(env, film, opts, done) {
+    const hint = env.querySelector(".env4-hint");
+    if (film.readyState < 3) {
+      env.classList.add("waiting");
+      if (hint) hint.textContent = word("opening");
+    }
+    const never = setTimeout(done, 25000);
+    film.addEventListener("playing", () => {
+      clearTimeout(never);
+      env.classList.remove("waiting");
+      setTimeout(done, ((film.duration || 8) - film.currentTime) * 1000 + 4000);
+    }, { once: true });
+    film.addEventListener("ended", done);
+    film.addEventListener("error", done);
+    film.muted = !!opts.startMuted;
+    soundState.set(!film.muted);
+    const p = film.play();
+    if (p && p.catch) p.catch(() => { film.muted = true; soundState.set(false); film.play().catch(done); });
+  }
+
   // The film IS the envelope: its first frame is the sealed envelope, a tap plays it with sound.
   function filmEnvelope(mount, data, theme, opts, onOpen) {
     const o = theme.opening;
@@ -970,13 +994,7 @@
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
       if (!opts.noFullscreen) tryFullscreen();
       env.classList.add("opening");
-      film.muted = !!opts.startMuted;
-      soundState.set(!film.muted);
-      const p = film.play();
-      if (p && p.catch) p.catch(() => { film.muted = true; soundState.set(false); film.play().catch(finish); });
-      film.addEventListener("ended", finish);
-      film.addEventListener("error", finish);
-      setTimeout(finish, 12000);
+      playFilm(env, film, opts, finish);
     };
     env.querySelector(".env4-tap").addEventListener("click", open);
     soundState.bind(film);
@@ -1047,6 +1065,23 @@
     stay();
     unseal = () => { removeEventListener("scroll", stay); page.classList.remove("sealed"); unseal = null; };
 
+    // The film goes first. What comes after it (the loop, the frames that follow the scroll) is fetched
+    // once the film has arrived in full, or when it has ended.
+    let fed = false;
+    const feed = () => {
+      if (fed) return;
+      fed = true;
+      if (loop) { loop.preload = "auto"; loop.load(); }
+      hero.dispatchEvent(new Event("fira:fed"));
+    };
+    const arrived = () => {
+      try {
+        const b = film.buffered;
+        return film.duration > 0 && b.length > 0 && b.end(b.length - 1) >= film.duration - 0.25;
+      } catch (e) { return false; }
+    };
+    ["progress", "canplaythrough", "suspend"].forEach((name) => film.addEventListener(name, () => { if (arrived()) feed(); }));
+
     let opened = false, released = false, settled = false;
     const release = () => {                        // the names arrive
       if (released) return;
@@ -1057,6 +1092,7 @@
       if (settled) return;
       settled = true;
       release();
+      feed();
       if (loop) {
         try { loop.currentTime = 0; } catch (e) { /* not loaded yet: it starts from its poster */ }
         loop.dataset.live = "1";
@@ -1077,20 +1113,13 @@
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
       if (!opts.noFullscreen) tryFullscreen();
       env.classList.add("opening");
-      hero.dispatchEvent(new Event("fira:opening"));
-      film.muted = !!opts.startMuted;
-      soundState.set(!film.muted);
-      const p = film.play();
-      if (p && p.catch) p.catch(() => { film.muted = true; soundState.set(false); film.play().catch(settle); });
+      playFilm(env, film, opts, settle);
       const watch = () => {
         if (settled) return;
         if (film.currentTime >= Number(o.lands)) release();
         requestAnimationFrame(watch);
       };
       requestAnimationFrame(watch);
-      film.addEventListener("ended", settle);
-      film.addEventListener("error", settle);
-      setTimeout(settle, 15000);
     }
     env.querySelector(".env4-tap").addEventListener("click", open);
     soundState.bind(film);

@@ -56,6 +56,9 @@
 /* An element with a filled entrance animation ignores a plain `opacity: 0`, so the exit is an animation too. */
 .env4.opening .env4-addr, .env4.opening .env4-hint, .env4.opening .env4-mono, .env4.opening .env4-sound { animation: env-out 0.7s ease forwards; }
 .env4.opening .env4-scrim { opacity: 0; transition: opacity 0.9s; }
+/* tapped, but the film is still on its way: the hint stays and says so */
+.env4.opening.waiting .env4-hint { animation: hint-pulse 1.3s ease-in-out infinite; }
+.env4.opening.waiting .env4-scrim { opacity: 1; }
 @keyframes env-out { to { opacity: 0; } }
 .env4.lifting { opacity: 0; transform: scale(1.06); pointer-events: none; }
 @keyframes hint-pulse { 0%,100% { opacity: 0.55; } 50% { opacity: 0.95; } }
