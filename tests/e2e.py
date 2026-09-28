@@ -611,7 +611,25 @@ class Suite:
             self.open_envelope(page, film=False)
             page.close()
             self.no_errors(f"seal {t['id']}")
-        return ", ".join(t["id"] for t in coded) or "no coded-envelope themes left"
+        if coded:
+            # The button for full screen is shown where the browser can do it, and nowhere else.
+            # An iPhone cannot: there the button did nothing.
+            for can in (True, False):
+                page = self.page()
+                if not can:
+                    page.add_init_script("""delete Element.prototype.requestFullscreen; delete Element.prototype.webkitRequestFullscreen;
+                        Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false });
+                        Object.defineProperty(Document.prototype, 'webkitFullscreenEnabled', { get: () => false });""")
+                page.goto(self.url(f"i.html?demo={coded[0]['id']}"))
+                able = page.evaluate("!!(document.documentElement.requestFullscreen && document.fullscreenEnabled)")
+                self.open_envelope(page, film=False)
+                page.wait_for_selector(".cta-pill", state="attached", timeout=8000)
+                shown = page.locator(".fs-toggle").count()
+                expect(shown == (1 if able else 0), f"full screen {'possible' if able else 'not possible'}, but the button is shown {shown} times")
+                expect(can or not able, "the test could not take full screen away from the browser")
+                page.close()
+            self.no_errors("seal, full screen")
+        return (", ".join(t["id"] for t in coded) or "no coded-envelope themes left") + "; full-screen button only where it works"
 
     def test_lang(self):
         """A Swedish invitation: words, dates, two places, free sections, music, one meal choice per guest."""
@@ -681,6 +699,36 @@ class Suite:
         page.wait_for_selector(".music-card.is-open iframe[src*='open.spotify.com/embed/track/']", timeout=15000)
         page.click(".music-card >> nth=1 >> .music-play")
         page.wait_for_function("document.querySelectorAll('.music-card iframe').length === 1", timeout=15000)
+        # a song in the official player: only the id of the video is taken from what was typed
+        song = page.evaluate(
+            """(theme) => { const out = {};
+                 for (const [name, link] of Object.entries({ link: 'https://www.youtube.com/watch?v=abcDEF_-123&t=4', short: 'https://youtu.be/abcDEF_-123',
+                        id: 'abcDEF_-123', elsewhere: 'https://example.com/watch?v=abcDEF_-123', script: 'abcDEF_-123"><img src=x onerror=alert(1)>', none: '' })) {
+                   const d = JSON.parse(JSON.stringify(FIRA_SAMPLES[theme]));
+                   d.chapters = ['hero', 'song', 'rsvp'];
+                   d.song = { title: 'Our <song>', caption: 'Someone & <b>someone</b>', youtube: link };
+                   FiraInvite.render(d, document.getElementById('mount'), { skipEnvelope: true });
+                   const f = document.querySelector('.song-frame');
+                   out[name] = f ? { video: f.dataset.video, title: document.querySelector('.ch-song h2').textContent.trim(),
+                                     caption: f.querySelector('figcaption').innerHTML, tags: document.querySelectorAll('.ch-song img, .ch-song script').length } : null;
+                 }
+                 return out; }""", "agapi")
+        for name in ("link", "short", "id"):
+            got = song[name]
+            expect(got and got["video"] == "abcDEF_-123" and got["title"] == "Our <song>" and "<b>" not in got["caption"] and got["tags"] == 0,
+                   f"the song block is wrong for a {name}: {got}")
+        for name in ("elsewhere", "script", "none"):
+            expect(song[name] is None, f"a song block was drawn for a link that is not a video ({name}): {song[name]}")
+        page.evaluate("""(theme) => { const d = JSON.parse(JSON.stringify(FIRA_SAMPLES[theme])); d.chapters = ['hero', 'song', 'rsvp'];
+                           d.song = { youtube: 'https://youtu.be/abcDEF_-123' };
+                           FiraInvite.render(d, document.getElementById('mount'), { skipEnvelope: true }); }""", "agapi")
+        page.locator(".song-frame").scroll_into_view_if_needed()
+        page.wait_for_selector(".song-screen iframe", state="attached", timeout=15000)
+        src = page.get_attribute(".song-screen iframe", "src")
+        expect(src.startswith("https://www.youtube-nocookie.com/embed/abcDEF_-123?") and "enablejsapi=1" in src and "origin=" in src,
+               f"the player is not asked for in the way it needs: {src}")
+        expect(page.inner_text(".ch-song h2").strip().lower() == "vår låt", "the song block has no heading of its own in Swedish")
+        self.errors = []      # the player says in the console that this test video does not exist
         page.goto(self.url("i.html?demo=agapi&embed=1"))
         page.wait_for_selector(".story .ch-hero")
 
@@ -690,7 +738,7 @@ class Suite:
         expect(safe == ["", "", "", "https://example.com/a", "tel:+46701740605", "media/x.jpg"], f"link filter is wrong: {safe}")
         page.close()
         self.no_errors("lang")
-        return "Swedish words and dates, time zone, per-guest choices, cards, dress code, songs, link filter"
+        return "Swedish words and dates, time zone, per-guest choices, cards, dress code, songs, the song in its player, link filter"
 
     def test_invite(self):
         """A published invitation, read only: nothing is sent, so a customer's guest list stays clean."""

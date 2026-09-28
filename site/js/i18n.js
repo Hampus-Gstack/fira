@@ -19,6 +19,7 @@ window.FIRA_I18N = {
     directions: "Get directions", directionsSub: "Open in Google Maps", calendar: "Add to calendar",
     calendarSub: "Save the date", song: "♪ Our song", viewDetails: "View details ↗", whatsapp: "WhatsApp",
     listen: "Listen", musicHint: "Tap a song to listen", playsOnSpotify: "Plays with Spotify",
+    ourSong: "Our song", playsOnYouTube: "Plays with YouTube",
     // RSVP
     rsvp: "RSVP", replyBy: "Please reply by", yourName: "Your name", email: "Email", emailPlaceholder: "your@email.com",
     willAttend: "Will you attend?", yes: "Joyfully accepts", no: "Regretfully declines",
@@ -42,6 +43,7 @@ window.FIRA_I18N = {
     directions: "Hitta hit", directionsSub: "Öppna i Google Maps", calendar: "Lägg till i kalendern",
     calendarSub: "Spara datumet", song: "♪ Vår låt", viewDetails: "Visa mer ↗", whatsapp: "WhatsApp",
     listen: "Lyssna", musicHint: "Tryck på en låt för att lyssna", playsOnSpotify: "Spelas via Spotify",
+    ourSong: "Vår låt", playsOnYouTube: "Spelas via YouTube",
     rsvp: "OSA", replyBy: "OSA senast", yourName: "Namn", email: "E-post", emailPlaceholder: "namn@exempel.se",
     willAttend: "Kommer du?", yes: "Kommer", no: "Kommer inte",
     guests: "Antal gäster (inklusive dig)", guestN: "Gäst {n}", message: "Hälsning (valfritt)",

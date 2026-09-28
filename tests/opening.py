@@ -191,9 +191,12 @@ def main():
                 with contextlib.suppress(Exception):
                     page.wait_for_function("(() => { const c = document.querySelector('.hero-seq-film'); return !c || c.width > 0; })()", timeout=20000)
                 page.wait_for_timeout(2500)
-                for part in (0.12, 0.3, 0.5, 0.7, 0.9, 1.0):
+                # a hero that is held for long tells a story of its own: look at more of it
+                long = hero["range"] > viewport["height"] * 1.5
+                parts = (0.05, 0.15, 0.25, 0.33, 0.4, 0.44, 0.48, 0.52, 0.58, 0.66, 0.76, 0.86, 0.94, 1.0) if long else (0.12, 0.3, 0.5, 0.7, 0.9, 1.0)
+                for part in parts:
                     page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", hero["range"] * part)
-                    page.wait_for_timeout(700)
+                    page.wait_for_timeout(900)
                     shot(f"hero held, {int(part * 100)} % of its scroll")
             figures = page.evaluate("[...document.querySelectorAll('.venue-art')].map(f => Math.round(f.getBoundingClientRect().top + scrollY))")
             for i, top in enumerate(figures):

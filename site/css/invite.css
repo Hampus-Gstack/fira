@@ -320,15 +320,23 @@
 .sec-h3 { font-family: var(--t-display), serif; font-weight: var(--t-display-weight, 600); font-size: 28px; line-height: 1.15; margin: 0 0 10px; color: var(--t-accent); }
 .sec-lines { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 19px; }
 /* cards in a section: a small picture, a name, a line of text */
-.sec-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 16px; max-width: 470px; margin: 24px auto 0; }
-.sec-cards.n1 { grid-template-columns: minmax(0, 250px); justify-content: center; }
-.sec-cards.n3 .sec-card:last-child { grid-column: 1 / -1; justify-self: center; width: calc(50% - 8px); }
+.sec-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 38px; max-width: 420px; margin: 26px auto 0; }
+@media (min-width: 760px) {
+  .sec-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 44px 36px; max-width: 860px; }
+  .sec-cards.n1 { grid-template-columns: minmax(0, 420px); justify-content: center; }
+  .sec-cards.n3 .sec-card:last-child { grid-column: 1 / -1; justify-self: center; width: calc(50% - 18px); }
+}
 .sec-card { display: block; color: inherit; text-decoration: none; text-align: center; }
 .sc-art { margin: 0 0 8px; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px; }
 .sc-art img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.7s ease; }
 a.sec-card:hover .sc-art img { transform: scale(1.05); }
-.sc-title { display: block; font-weight: 600; font-size: 18px; line-height: 1.2; }
-.sc-text { display: block; font-size: 14.5px; line-height: 1.4; opacity: 0.82; margin-top: 3px; }
+.sc-title { display: block; font-weight: 600; font-size: 21px; line-height: 1.2; }
+.sc-text { display: block; font-size: 16px; line-height: 1.45; opacity: 0.82; margin-top: 4px; }
+/* the song: the official player in a frame of the theme */
+.song-frame { margin: 24px auto 0; max-width: 560px; }
+.song-screen { aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #14110E; box-shadow: 0 22px 50px rgba(0, 0, 0, 0.22); }
+.song-screen iframe { width: 100%; height: 100%; border: 0; display: block; }
+.song-frame figcaption { font-size: 15px; line-height: 1.4; opacity: 0.8; margin-top: 14px; }
 .sc-link { display: inline-block; margin-top: 8px; padding-bottom: 2px; font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--t-accent); border-bottom: 1px solid currentColor; }
 .ph-title { position: relative; z-index: 3; text-align: center; font-family: var(--t-display), serif; font-size: clamp(38px, 9vw, 52px); line-height: 1.1; margin: 26px 0 0; }
 .dc-title { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.75; margin: 26px 0 0; }
@@ -723,12 +731,15 @@ a.sec-card:hover .sc-art img { transform: scale(1.05); }
   transition: opacity 0.5s ease;
 }
 .hero-film.done { opacity: 0; pointer-events: none; }
+/* The opening film rests on its last frame until the picture under it has arrived. A guest who scrolls
+   before that sees the film that follows the scroll, not the frame that rests. */
+.ch-hero.filming .hero-film { opacity: 0; pointer-events: none; }
 .hero-seq-film { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.35s ease; }
 .ch-hero.filming .hero-seq-film { opacity: 1; }
 /* while the page scrolls under the held hero, its words step back (filter: their own entrance owns `opacity`) */
 .hero-staged .ch-inner, .hero-staged .ch-chevron {
-  filter: opacity(clamp(0, calc(1 - var(--pin-p, 0) * 3.4), 1));
-  translate: 0 calc(var(--pin-p, 0) * -64px);
+  filter: opacity(clamp(0, calc(1 - var(--pin-p, 0) * var(--pin, 1) * 3.2), 1));
+  translate: 0 calc(var(--pin-p, 0) * var(--pin, 1) * -60px);
 }
 /* The names are written from left to right. A mask cuts what reaches outside its box, and a script
    reaches far, so the ink has a box of its own that is wider than the line (the margins take it back).
@@ -798,12 +809,13 @@ html.sealed .env4 { touch-action: none; }
 .theme-agapi .hero-staged .inv-hero-note { color: #FFF3D2; text-shadow: 0 1px 8px rgba(16, 44, 92, 0.6); }
 .theme-agapi .hero-staged .ag-key { filter: brightness(0) invert(1); opacity: 0.9; margin-top: 4px; }
 .theme-agapi .hero-staged .ch-chevron { color: #FFFFFF; }
-/* While the hero is held, the page rises into it from below: ivory climbs the screen.
-   The chapter that follows is ivory too, so there is no edge between them. */
+/* Over the last half screen of its hold the page rises into the hero from below: ivory climbs the
+   screen (--veil goes from 0 to 1). The chapter that follows is ivory too, so there is no edge. */
+.theme-agapi .hero-stage { --veil: clamp(0, calc(1 - (1 - var(--pin-p, 0)) * var(--pin, 1) * 2), 1); }
 .theme-agapi .hero-stage::after {
   content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  background: linear-gradient(to top, var(--ag-ivory) 0%, var(--ag-ivory) calc(var(--pin-p, 0) * 56%), rgba(251, 247, 238, 0) calc(var(--pin-p, 0) * 56% + 46%));
-  opacity: clamp(0, calc(var(--pin-p, 0) * 2.6 - 0.5), 1);
+  background: linear-gradient(to top, var(--ag-ivory) 0%, var(--ag-ivory) calc(var(--veil) * 62%), rgba(251, 247, 238, 0) calc(var(--veil) * 62% + 46%));
+  opacity: clamp(0, calc(var(--veil) * 1.6), 1);
 }
 /* the envelope is light: what is written on it is dark, with light behind it */
 .theme-agapi .env4-scrim { background: linear-gradient(180deg, rgba(255, 252, 245, 0.45) 0%, rgba(255, 252, 245, 0) 27%, rgba(255, 252, 245, 0) 74%, rgba(255, 252, 245, 0.55) 100%); }
@@ -824,8 +836,13 @@ html.sealed .env4 { touch-action: none; }
 .theme-agapi .dc-palette { gap: 14px; margin-top: 12px; }
 .theme-agapi .dc-swatch i { width: 36px; height: 36px; box-shadow: 0 0 0 2px var(--t-bg), 0 0 0 3px color-mix(in srgb, var(--ag-gold) 70%, transparent), 0 5px 12px rgba(31, 53, 89, 0.16); }
 .theme-agapi .sc-art { border-radius: 0; mix-blend-mode: multiply; margin-bottom: 2px; }
-.theme-agapi .sc-title { font-family: "Allura", cursive; font-weight: 400; font-size: 34px; line-height: 1; color: var(--ag-terra); }
-.theme-agapi .sc-text { font-size: 15.5px; }
+.theme-agapi .sc-title { font-family: "Allura", cursive; font-weight: 400; font-size: 42px; line-height: 1; color: var(--ag-terra); }
+.theme-agapi .sc-text { font-size: 17px; }
+.theme-agapi .song-screen { border-radius: 10px; box-shadow: 0 0 0 5px var(--ag-ivory), 0 0 0 6.5px var(--ag-gold), 0 0 0 13px var(--ag-ivory), 0 0 0 14px color-mix(in srgb, var(--ag-gold) 55%, transparent), 0 26px 50px rgba(31, 53, 89, 0.22); }
+.theme-agapi .song-frame { margin-top: 34px; max-width: 520px; }
+.theme-agapi .song-frame figcaption { font-style: italic; margin-top: 28px; }
+/* the lamp in its window comes closer as the guest arrives at it */
+.theme-agapi .venue-art.art-arch img { height: 100%; object-fit: cover; transform: scale(calc(1.2 - var(--ap, 1) * 0.2)); transform-origin: 50% 38%; }
 .theme-agapi .sc-link { color: #96752A; }
 .theme-agapi .sec-block + .sec-block { margin-top: 44px; }
 
@@ -925,7 +942,7 @@ html.sealed .env4 { touch-action: none; }
   /* the page that follows is as wide as the screen: at the end of its hold the card has become the page */
   .hero-stage::before {
     content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: var(--t-bg);
-    opacity: clamp(0, calc((var(--pin-p, 0) - 0.62) * 2.7), 1);
+    opacity: clamp(0, calc(1 - (1 - var(--pin-p, 0)) * var(--pin, 1) * 2.6), 1);
   }
 }
 

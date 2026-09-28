@@ -255,6 +255,40 @@
     let ticking = false;
     let slow = false;                            // a film came too late: the line is for pictures and music
 
+    // A number is written to the page only when it has changed: every write makes the browser work
+    // out the styles of the chapter again.
+    const written = new WeakMap();
+    const put = (el, name, value) => {
+      let seen = written.get(el);
+      if (!seen) written.set(el, (seen = {}));
+      if (seen[name] === value) return;
+      seen[name] = value;
+      el.style.setProperty(name, value);
+    };
+
+    // Films follow the scroll with a little weight: each frame of the screen they cover a quarter of
+    // what is left. A wheel that turns in steps and a thumb that stops short both end in a glide.
+    const aim = new Map(), now = new Map();
+    let rolling = false;
+    function roll() {
+      rolling = false;
+      aim.forEach((target, film) => {
+        if (!film.count) return;
+        let at = now.has(film) ? now.get(film) : target;
+        const gap = target - at;
+        at = Math.abs(gap) < 0.04 || Math.abs(gap) > film.count * 0.5 ? target : at + gap * 0.25;
+        now.set(film, at);
+        film.draw(at);
+        if (at !== target) rolling = true;
+      });
+      if (rolling) requestAnimationFrame(roll);
+    }
+    const follow = (film, target) => {
+      aim.set(film, target);
+      if (!rolling) { rolling = true; requestAnimationFrame(roll); }
+    };
+    const rest = (film) => { film.pause(); film.release(); aim.delete(film); now.delete(film); };
+
     function start(canvas) {                     // fetch a film's frames, once
       if (!canvas || films.has(canvas) || canvas.dataset.late) return;
       const owner = canvas.closest(".venue-art, .ch-hero");
@@ -271,7 +305,7 @@
     // under the guest's eyes would be worse.
     function still(fig, canvas) {
       const film = films.get(canvas);
-      if (film) film.pause();
+      if (film) rest(film);
       films.delete(canvas);
       canvas.dataset.late = "1";
       fig.classList.remove("filming");
@@ -294,20 +328,26 @@
     function update() {
       ticking = false;
       const vh = innerHeight;
-      for (const ch of chapters) {
-        const r = ch.getBoundingClientRect();
-        const p = clamp((vh - r.top) / (vh + r.height));
-        ch.style.setProperty("--p", p.toFixed(4));
-      }
+      // Everything is measured first and written afterwards: a write between two measurements makes
+      // the browser lay the page out again, once for every chapter.
+      const boxes = chapters.map((ch) => ch.getBoundingClientRect());
+      const heroBox = hero ? hero.getBoundingClientRect() : null;
+      const artBoxes = arts.map((fig) => fig.getBoundingClientRect());
+      const max = bar ? document.documentElement.scrollHeight - vh : 0;
+      const top = scrollY;
+      chapters.forEach((ch, i) => {
+        const r = boxes[i];
+        put(ch, "--p", clamp((vh - r.top) / (vh + r.height)).toFixed(3));
+      });
       if (hero) {
-        const r = hero.getBoundingClientRect();
+        const r = heroBox;
         const range = r.height - vh;
         const pin = range > 1 ? clamp(-r.top / range) : 0;
-        hero.style.setProperty("--pin-p", pin.toFixed(4));
+        put(hero, "--pin-p", pin.toFixed(4));
         const film = films.get(heroCanvas);
-        if (film) { if (r.bottom < -vh * 0.5) film.pause(); else film.resume(); }   // left behind: the line is for what is on screen
-        if (film && film.count) {
-          film.draw(pin * (film.count - 1));
+        if (film) { if (r.bottom < -vh * 0.5) rest(film); else film.resume(); }   // left behind: the line is for what is on screen
+        if (film && film.count && r.bottom >= -vh * 0.5) {
+          follow(film, pin * (film.count - 1));
           const filming = pin > 0.004 && film.drawn >= 0;
           hero.classList.toggle("filming", filming);
           if (heroLoop && heroLoop.dataset.live) {      // the loop rests while the scroll film covers it
@@ -316,27 +356,24 @@
           }
         }
       }
-      for (const fig of arts) {
-        const r = fig.getBoundingClientRect();
+      arts.forEach((fig, i) => {
+        const r = artBoxes[i];
         const canvas = fig.querySelector(".art-film");
-        let film = films.get(canvas);
-        if (r.bottom < -vh || r.top > vh * 2.5) { if (film) film.pause(); continue; }
+        const film = films.get(canvas);
+        if (r.bottom < -vh || r.top > vh * 2.5) { if (film) rest(film); return; }
         if (film) film.resume();
         const ap = REDUCED ? 1 : clamp((vh * 0.94 - r.top) / (vh * 0.62));
-        fig.style.setProperty("--ap", ap.toFixed(4));
+        put(fig, "--ap", ap.toFixed(3));
         if (canvas && ap > 0.01 && !fig.dataset.judged && !fig.classList.contains("nofilm")) {
           fig.dataset.judged = "1";
           setTimeout(() => judge(canvas), 700);
         }
-        if (film && film.count) film.draw(ap * (film.count - 1));
+        if (film && film.count) follow(film, ap * (film.count - 1));
         if (film && film.drawn >= 0) fig.classList.add("drawn");      // its canvas has a picture on it
         fig.classList.toggle("filming", !!film && film.drawn >= 0 && ap < 0.995);
         fig.classList.toggle("done", ap >= 0.995);
-      }
-      if (bar) {
-        const max = document.documentElement.scrollHeight - vh;
-        bar.style.width = (max > 0 ? (scrollY / max) * 100 : 0).toFixed(2) + "%";
-      }
+      });
+      if (bar) put(bar, "width", (max > 0 ? (top / max) * 100 : 0).toFixed(1) + "%");
     }
     const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
     const onResize = () => { films.forEach((film) => film.resize()); update(); };
@@ -432,6 +469,12 @@
     if (fn) { try { fn.call(document).catch(() => {}); } catch (e) {} }
   }
   const isFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  // An iPhone cannot show a page in full screen, and neither can a page inside a frame that was not
+  // given the right: there the button would do nothing, so it is not shown.
+  const canFullscreen = () => {
+    const el = document.documentElement;
+    return !!((el.requestFullscreen || el.webkitRequestFullscreen) && (document.fullscreenEnabled || document.webkitFullscreenEnabled));
+  };
 
   // ======================================================================
   // Chapters. Each returns "" when the invitation has nothing for it.
@@ -767,6 +810,27 @@
       </section>`;
     },
 
+    // One song, in the official player of the service it is on: `song.youtube` is a link or an id.
+    // The player is fetched when the chapter comes near, the guest starts it, and the page's own
+    // music rests while it plays. The recording stays where its owner published it.
+    song(data) {
+      const s = data.song || {};
+      const id = videoId(s.youtube);
+      if (!id) return "";
+      return `
+      <section class="ch ch-song" data-ch="song">
+        <div class="ch-inner">
+          ${h2(s.title || word("ourSong"))}
+          ${s.text ? paragraphs(s.text, "inv-p") : ""}
+          <figure class="song-frame reveal" data-video="${esc(id)}">
+            <div class="song-screen"></div>
+            ${s.caption ? `<figcaption>${esc(s.caption)}</figcaption>` : ""}
+          </figure>
+          <p class="music-note reveal">${T("playsOnYouTube")}</p>
+        </div>
+      </section>`;
+    },
+
     // Free-form content: `sections[]` entries, used as "section:<key>".
     // Each block may have a heading, text, short lines (names), buttons, and a style
     // ("signature" or "quote").
@@ -876,6 +940,63 @@
   function trackId(m) {
     const match = /track[/:]([A-Za-z0-9]{10,40})/.exec(String(m.spotify || ""));
     return match ? match[1] : "";
+  }
+  // The id of a video, from a link to it or from the id itself. Nothing else of what was typed is used.
+  function videoId(v) {
+    const text = String(v || "").trim();
+    if (/^[A-Za-z0-9_-]{11}$/.test(text)) return text;
+    const match = /(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#\s]*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])/.exec(text);
+    return match ? match[1] : "";
+  }
+
+  // ---------- the song: the official player, fetched when its chapter comes near ----------
+  const PLAYER = "https://www.youtube-nocookie.com";
+  let songCleanup = null;
+  function wireSong(root) {
+    if (songCleanup) songCleanup();
+    const figures = [...root.querySelectorAll(".song-frame[data-video]")];
+    if (!figures.length) return;
+    const frames = new Set();
+    const answered = new WeakSet();          // players that have said something
+    const timers = [];
+    const heard = (e) => {
+      const from = e.origin === PLAYER && [...frames].find((f) => f.contentWindow === e.source);
+      if (!from) return;
+      answered.add(from);
+      let said = e.data;
+      if (typeof said === "string") { try { said = JSON.parse(said); } catch (err) { return; } }
+      const info = said && said.info;
+      const state = info && typeof info === "object" ? info.playerState : (said && said.event === "onStateChange" ? info : undefined);
+      if (state === 1 || state === 3) soundState.hush();          // the song plays: the page's music rests
+      else if (state === 0 || state === 2) soundState.back();
+    };
+    addEventListener("message", heard);
+    const near = new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      near.unobserve(e.target);
+      const frame = document.createElement("iframe");
+      frame.title = (root.querySelector(".ch-song h2") || {}).textContent || "";
+      frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen";
+      frame.referrerPolicy = "strict-origin-when-cross-origin";   // the player refuses a page that does not say where it is
+      frame.src = PLAYER + "/embed/" + encodeURIComponent(e.target.dataset.video)
+        + "?playsinline=1&rel=0&enablejsapi=1&origin=" + encodeURIComponent(location.origin);
+      // The player tells what it does only to a page that has greeted it, and a greeting that comes
+      // before it listens is lost: the page greets until the player has answered, for a minute at most.
+      const hello = () => { if (frame.contentWindow) frame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: "fira-song", channel: "widget" }), PLAYER); };
+      frame.addEventListener("load", () => {
+        let tries = 0;
+        hello();
+        const again = setInterval(() => {
+          if (answered.has(frame) || ++tries > 40) return clearInterval(again);
+          hello();
+        }, 1500);
+        timers.push(again);
+      });
+      frames.add(frame);
+      e.target.querySelector(".song-screen").appendChild(frame);
+    }), { rootMargin: "120% 0px 120% 0px" });
+    figures.forEach((f) => near.observe(f));
+    songCleanup = () => { removeEventListener("message", heard); near.disconnect(); timers.forEach(clearInterval); songCleanup = null; };
   }
 
   // ---------- music: the official player, loaded when the guest asks for it ----------
@@ -1048,6 +1169,11 @@
       if (p && p.catch) p.catch(() => {});
     },
     hush() { if (this.song && !this.song.paused) this.song.pause(); },   // something else is playing
+    back() {                       // it has stopped: the page's music again, if the guest has sound on
+      if (!this.song || !this.on || !this.started || this.waiting || document.hidden || !this.song.paused) return;
+      const p = this.song.play();
+      if (p && p.catch) p.catch(() => {});
+    },
     reset() {
       if (this.song) { this.song.pause(); this.song.removeAttribute("src"); }
       this.on = false; this.media = []; this.song = null; this.started = false; this.waiting = false; this.btn = null;
@@ -1378,6 +1504,7 @@
       wrap.querySelectorAll(".inv-countdown").forEach((el) => countdown(el, data));
       wireRsvp(wrap, data, opts, theme);
       wireMusic(wrap);
+      wireSong(wrap);
       wholePictures(wrap);
       revealOnScroll(wrap);
       storyEngine(wrap);
@@ -1403,7 +1530,7 @@
           { threshold: 0.2 }
         ).observe(wrap.querySelector("#rsvp"));
       }
-      if (!opts.skipEnvelope && !opts.noFullscreen) {
+      if (!opts.skipEnvelope && !opts.noFullscreen && canFullscreen()) {
         const fs = document.createElement("button");
         fs.className = "fs-toggle";
         fs.setAttribute("aria-label", word("toggleFullscreen"));
