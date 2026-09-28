@@ -427,30 +427,63 @@
 
   // Doves that cross a chapter when the guest arrives at it (`theme.flights`). They fly once, and again
   // when the guest has been away and comes back. Every other flight goes the other way.
+  // A flight waits for its pictures: they are fetched when the chapter comes near, and doves that fly
+  // before their pictures have arrived cross the page unseen (on a slow line the first ones did).
   let flightsCleanup = null;
   function flights(root, theme) {
     if (flightsCleanup) flightsCleanup();
     const f = theme.flights;
-    if (REDUCED || !f || !Array.isArray(f.chapters)) return;
+    const sheets = f && Array.isArray(f.doves) ? f.doves.map(safeUrl).filter(Boolean).slice(0, 2) : [];
+    if (REDUCED || !f || !Array.isArray(f.chapters) || !sheets.length) return;
     const layers = [];
-    f.chapters.forEach((name, i) => {
+    f.chapters.forEach((name) => {
       const [kind, key] = String(name).split(":");
       const ch = [...root.querySelectorAll(".ch")].find((c) => c.dataset.ch === kind && (key === undefined || c.dataset.key === key));
       if (!ch) return;
       const layer = document.createElement("div");
       layer.className = "flight" + (layers.length % 2 ? " to-left" : "");
       layer.setAttribute("aria-hidden", "true");
-      layer.innerHTML = '<i class="dove dove-a"></i><i class="dove dove-b"></i>';
+      layer.innerHTML = sheets.map((s, i) => `<i class="dove dove-${i ? "b" : "a"}"></i>`).join("");
       ch.appendChild(layer);
       layers.push(layer);
     });
     if (!layers.length) return;
+    let arrived = null;                       // the pictures, fetched once for all flights
+    const fetched = () => arrived || (arrived = Promise.all(sheets.map((src) => new Promise((done) => {
+      const img = new Image();
+      img.onload = () => (img.decode ? img.decode().then(() => done(true), () => done(true)) : done(true));
+      img.onerror = () => done(false);
+      img.src = src;
+    }))).then((all) => all.every(Boolean)));
+    const state = new WeakMap();              // layer -> { there: in view, ready: its pictures are on it }
+    const settle = (layer) => {
+      const s = state.get(layer);
+      layer.classList.toggle("fly", !!(s.there && s.ready));
+    };
+    const near = new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      near.unobserve(e.target);
+      const layer = e.target.querySelector(":scope > .flight");
+      fetched().then((ok) => {
+        if (!ok) return;                      // no pictures, no flight
+        layer.querySelectorAll(".dove").forEach((d, i) => { d.style.backgroundImage = 'url("' + sheets[i].replace(/["\\]/g, "") + '")'; });
+        state.get(layer).ready = true;
+        layer.classList.add("ready");
+        settle(layer);
+      });
+    }), { rootMargin: "150% 0px 150% 0px" });
     const seen = new IntersectionObserver((entries) => entries.forEach((e) => {
       const layer = e.target.querySelector(":scope > .flight");
-      if (layer) layer.classList.toggle("fly", e.isIntersecting);
+      if (!layer) return;
+      state.get(layer).there = e.isIntersecting;
+      settle(layer);
     }), { rootMargin: "-18% 0px -30% 0px" });
-    layers.forEach((layer) => seen.observe(layer.parentElement));
-    flightsCleanup = () => { seen.disconnect(); flightsCleanup = null; };
+    layers.forEach((layer) => {
+      state.set(layer, { there: false, ready: false });
+      near.observe(layer.parentElement);
+      seen.observe(layer.parentElement);
+    });
+    flightsCleanup = () => { near.disconnect(); seen.disconnect(); flightsCleanup = null; };
   }
 
   function revealOnScroll(root) {

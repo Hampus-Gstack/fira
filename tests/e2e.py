@@ -615,6 +615,8 @@ class Suite:
         told = []
         for t in themes:
             page = self.page()
+            held, let = [], []                          # the doves' pictures, kept back until the test lets them through
+            page.route("**/doves-*", lambda route: route.continue_() if let else held.append(route))
             page.goto(self.url(f"i.html?demo={t['id']}&embed=1"))
             page.wait_for_selector(".story .ch-hero")
             layers = page.locator(".flight").count()
@@ -625,10 +627,19 @@ class Suite:
                 page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", y)
                 page.wait_for_timeout(40)
             page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", max(0, top - 100))
-            page.wait_for_function("document.querySelector('.flight').classList.contains('fly')", timeout=15000)
+            # A flight waits for its pictures: doves that fly before them cross the page unseen, which
+            # is what happened on a slow line. The guest is there, the pictures are not: nothing flies.
+            page.wait_for_timeout(1500)
+            expect(held, f"{t['id']}: the doves' pictures were not asked for when the chapter came near")
+            waiting = page.evaluate("(() => { const f = document.querySelector('.flight'); return { fly: f.classList.contains('fly'), ready: f.classList.contains('ready') }; })()")
+            expect(not waiting["fly"] and not waiting["ready"], f"{t['id']}: the doves fly before their pictures have arrived: {waiting}")
+            let.append(True)
+            for route in held:
+                route.continue_()
+            page.wait_for_function("(() => { const f = document.querySelector('.flight'); return f.classList.contains('ready') && f.classList.contains('fly'); })()", timeout=20000)
             page.wait_for_function(
                 """() => new Promise((done) => { const d = document.querySelector('.flight .dove'), s = getComputedStyle(d);
-                     if (!/url\(/.test(s.backgroundImage)) return done(false);
+                     if (!s.backgroundImage.includes('url(')) return done(false);
                      const x = d.getBoundingClientRect().left, at = s.backgroundPositionX;
                      setTimeout(() => done(Math.abs(d.getBoundingClientRect().left - x) > 8 && getComputedStyle(d).backgroundPositionX !== at), 700); })""",
                 timeout=20000)

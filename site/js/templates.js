@@ -134,8 +134,9 @@
       },
       music: M + "music-agapi.mp3",     // original music, made for this theme; plays from the tap that opens the envelope
       // The doves of the first page come back: two of them cross these chapters when the guest arrives there.
-      // Their pictures are set in the theme's CSS (on `.near`, so they are fetched when a chapter comes close).
-      flights: { chapters: ["section:family", "section:dinner", "dresscode", "section:speeches"] },
+      // `doves`: a sheet of twenty pictures of a wing beat for each dove (theme-assets skill, lift_dove.py).
+      flights: { doves: [M + "doves-agapi-a.webp", M + "doves-agapi-b.webp"],
+                 chapters: ["section:family", "section:dinner", "dresscode", "section:speeches"] },
       photoFrame: "arch",
       chapters: ["hero", "message", "place:0", "countdown", "section:family", "place:1", "section:dinner", "section:stay",
                  "dresscode", "section:gift", "section:speeches", "photo", "song", "rsvp", "section:closing"],

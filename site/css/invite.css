@@ -791,8 +791,9 @@ html.sealed .env4 { touch-action: none; }
   -webkit-mask-composite: source-in; mask-composite: intersect;
 }
 /* Doves that cross a chapter (theme.flights). A dove is a sheet of twenty pictures of one wing beat and a
-   half, ten to a row: the sheet steps on while the dove is carried across. Themes set the sheets, on
-   `.near`, and may set --size, --top, --time and --wait for each dove. */
+   half, ten to a row: the sheet steps on while the dove is carried across. The engine puts the sheets on
+   the doves when they have arrived, and only then lets them fly. Themes may set --size, --top, --time
+   and --wait for each dove. */
 .flight { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
 .dove {
   position: absolute; left: 0; top: var(--top, 26px); width: var(--size, 78px); aspect-ratio: 1;
@@ -934,9 +935,6 @@ html.sealed .env4 { touch-action: none; }
   .theme-agapi .ch-rsvp { --fade-y: linear-gradient(#000 62%, transparent 100%); }
   .theme-agapi .ch-message, .theme-agapi .sec-closing { --fade-y: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); }
 }
-/* the doves of the first page, in the chapters of the middle */
-.theme-agapi .ch.near .dove-a { background-image: url("../media/doves-agapi-a.webp"); }
-.theme-agapi .ch.near .dove-b { background-image: url("../media/doves-agapi-b.webp"); }
 .theme-agapi .ch.ch-rsvp { background: linear-gradient(180deg, var(--ag-night) 0%, var(--ag-night) 46%, var(--ag-deep) 100%); }
 .theme-agapi .ch.ch-rsvp { padding-top: calc(34px + min(52vw, 400px)); }
 .theme-agapi .ch.sec-closing { padding-bottom: min(62vw, 470px); }
