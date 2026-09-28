@@ -809,17 +809,18 @@ html.sealed .env4 { touch-action: none; }
 .theme-agapi .hero-staged .inv-hero-note { color: #FFF3D2; text-shadow: 0 1px 8px rgba(16, 44, 92, 0.6); }
 .theme-agapi .hero-staged .ag-key { filter: brightness(0) invert(1); opacity: 0.9; margin-top: 4px; }
 .theme-agapi .hero-staged .ch-chevron { color: #FFFFFF; }
-/* Over the last half screen of its hold the page rises into the hero from below: ivory climbs the
-   screen (--veil goes from 0 to 1). The chapter that follows is ivory too, so there is no edge. */
-.theme-agapi .hero-stage { --veil: clamp(0, calc(1 - (1 - var(--pin-p, 0)) * var(--pin, 1) * 2), 1); }
-.theme-agapi .hero-stage::after {
-  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  background: linear-gradient(to top, var(--ag-ivory) 0%, var(--ag-ivory) calc(var(--veil) * 62%), rgba(251, 247, 238, 0) calc(var(--veil) * 62% + 46%));
-  opacity: clamp(0, calc(var(--veil) * 1.6), 1);
+/* The lamp hangs over the page. The chapter after the hero rises into the hero's last screen while the
+   hero is still held: its top is clear, so the lamp shows through, and it turns into the page further
+   down. Then both scroll away together, the lamp above the words. No screen in between is empty. */
+.theme-agapi .ch-hero + .ch {
+  position: relative; z-index: 4; margin-top: -44vh; clip-path: none;
+  padding-top: 27vh;
+  background: linear-gradient(to bottom, rgba(251, 247, 238, 0) 0, rgba(251, 247, 238, 0.55) 9vh, rgba(251, 247, 238, 0.92) 17vh, var(--ag-ivory) 25vh);
 }
 /* the envelope is light: what is written on it is dark, with light behind it */
 .theme-agapi .env4-scrim { background: linear-gradient(180deg, rgba(255, 252, 245, 0.45) 0%, rgba(255, 252, 245, 0) 27%, rgba(255, 252, 245, 0) 74%, rgba(255, 252, 245, 0.55) 100%); }
-.theme-agapi .env4-mono { color: #5B4312; text-shadow: 0 1px 0 rgba(255, 238, 190, 0.65), 0 -1px 0 rgba(60, 40, 0, 0.18); opacity: 0.92; font-size: calc(var(--seal-w) * 0.4); }
+/* the seal is white wax: the letters are pressed into it, a shade darker, with light on their lower edge */
+.theme-agapi .env4-mono { color: #8E7C58; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85), 0 -1px 0 rgba(70, 55, 25, 0.22); opacity: 0.9; font-size: calc(var(--seal-w) * 0.4); }
 
 /* paintings on paper: the paper has no edge, the painting fades into the page on all four sides.
    `multiply` reaches the chapter's colour only if nothing in between starts a layer of its own. */
@@ -841,19 +842,9 @@ html.sealed .env4 { touch-action: none; }
 .theme-agapi .song-screen { border-radius: 10px; box-shadow: 0 0 0 5px var(--ag-ivory), 0 0 0 6.5px var(--ag-gold), 0 0 0 13px var(--ag-ivory), 0 0 0 14px color-mix(in srgb, var(--ag-gold) 55%, transparent), 0 26px 50px rgba(31, 53, 89, 0.22); }
 .theme-agapi .song-frame { margin-top: 34px; max-width: 520px; }
 .theme-agapi .song-frame figcaption { font-style: italic; margin-top: 28px; }
-/* the lamp in its window comes closer as the guest arrives at it */
-.theme-agapi .venue-art.art-arch img { height: 100%; object-fit: cover; transform: scale(calc(1.2 - var(--ap, 1) * 0.2)); transform-origin: 50% 38%; }
 .theme-agapi .sc-link { color: #96752A; }
 .theme-agapi .sec-block + .sec-block { margin-top: 44px; }
 
-/* the lamp of the church, in an arched window at the ceremony */
-.theme-agapi .venue-art.art-arch {
-  max-width: min(72vw, 330px); border-radius: 999px 999px 10px 10px; overflow: hidden; margin: 6px auto 38px;
-  mix-blend-mode: normal; -webkit-mask-image: none; mask-image: none; background: #E9DDC6;
-  box-shadow: 0 0 0 5px var(--ag-ivory), 0 0 0 6.5px var(--ag-gold), 0 0 0 13px var(--ag-ivory),
-              0 0 0 14px color-mix(in srgb, var(--ag-gold) 55%, transparent), 0 26px 60px rgba(31, 53, 89, 0.2);
-}
-.theme-agapi .venue-art.art-arch img { width: 100%; height: 100%; object-fit: cover; }
 .theme-agapi .ph-title { color: var(--ag-blue); }
 .theme-agapi .ph-caption { font-style: normal; font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: #96752A; opacity: 1; margin-top: 4px; }
 .theme-agapi .ch-photo { min-height: 0; padding-bottom: 10vh; }
@@ -871,18 +862,15 @@ html.sealed .env4 { touch-action: none; }
   opacity: clamp(0, calc(var(--p, 1) * 7 - 0.3), 1);
   transform: scale(calc(1.12 - clamp(0, var(--p, 1) * 0.8, 0.12)));
 }
-.theme-agapi .ch-message::before, .theme-agapi .ch-rsvp::before { top: 0; left: 0; background-position: left top; transform-origin: top left; }
-.theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::after { top: 0; right: 0; background-position: right top; transform-origin: top right; }
-.theme-agapi .sec-closing::before { bottom: 0; left: 0; background-position: left bottom; transform-origin: bottom left; }
-.theme-agapi .sec-closing::after { bottom: 0; right: 0; background-position: right bottom; transform-origin: bottom right; }
+.theme-agapi .ch-rsvp::before { top: 0; left: 0; background-position: left top; transform-origin: top left; }
+.theme-agapi .ch-rsvp::after { top: 0; right: 0; background-position: right top; transform-origin: top right; }
+.theme-agapi .ch-message::before, .theme-agapi .sec-closing::before { bottom: 0; left: 0; background-position: left bottom; transform-origin: bottom left; }
+.theme-agapi .ch-message::after, .theme-agapi .sec-closing::after { bottom: 0; right: 0; background-position: right bottom; transform-origin: bottom right; }
 /* The pictures hang on `.near`: a chapter gets that class when it comes within a screen and a half. */
-.theme-agapi .ch-message.near::before, .theme-agapi .ch-message.near::after { background-image: url("../media/flowers-agapi-top.webp"); }
+.theme-agapi .ch-message.near::before, .theme-agapi .ch-message.near::after,
 .theme-agapi .sec-closing.near::before, .theme-agapi .sec-closing.near::after { background-image: url("../media/flowers-agapi-bottom.webp"); }
 .theme-agapi .ch-rsvp.near::before, .theme-agapi .ch-rsvp.near::after { background-image: url("../media/flowers-agapi-blue-top.webp"); }
-.theme-agapi .ch-message::before, .theme-agapi .ch-message::after {
-  mix-blend-mode: multiply;
-  -webkit-mask-image: linear-gradient(#000 72%, transparent 100%); mask-image: linear-gradient(#000 72%, transparent 100%);
-}
+.theme-agapi .ch-message::before, .theme-agapi .ch-message::after,
 .theme-agapi .sec-closing::before, .theme-agapi .sec-closing::after {
   mix-blend-mode: multiply;
   -webkit-mask-image: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); mask-image: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%);
@@ -903,16 +891,17 @@ html.sealed .env4 { touch-action: none; }
     mask-image: var(--fade-y), linear-gradient(to left, #000 62%, transparent 100%);
     -webkit-mask-composite: source-in; mask-composite: intersect;
   }
-  .theme-agapi .ch-message { --fade-y: linear-gradient(#000 72%, transparent 100%); }
   .theme-agapi .ch-rsvp { --fade-y: linear-gradient(#000 62%, transparent 100%); }
-  .theme-agapi .sec-closing { --fade-y: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); }
+  .theme-agapi .ch-message, .theme-agapi .sec-closing { --fade-y: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); }
 }
 .theme-agapi .ch.ch-rsvp { background: linear-gradient(180deg, var(--ag-night) 0%, var(--ag-night) 46%, var(--ag-deep) 100%); }
-.theme-agapi .ch.ch-message, .theme-agapi .ch.ch-rsvp { padding-top: calc(34px + min(52vw, 400px)); }
+.theme-agapi .ch.ch-rsvp { padding-top: calc(34px + min(52vw, 400px)); }
 .theme-agapi .ch.sec-closing { padding-bottom: min(62vw, 470px); }
-@media (min-width: 1400px) {     /* the flowers stand beside the text, not above it */
-  .theme-agapi .ch.ch-message, .theme-agapi .ch.ch-rsvp { padding-top: calc(34px + 17vh); }
+.theme-agapi .ch.ch-message { padding-bottom: min(58vw, 440px); }
+@media (min-width: 1400px) {     /* the flowers stand beside the text, not above or under it */
+  .theme-agapi .ch.ch-rsvp { padding-top: calc(34px + 17vh); }
   .theme-agapi .ch.sec-closing { padding-bottom: 30vh; }
+  .theme-agapi .ch.ch-message { padding-bottom: 16vh; }
 }
 .theme-agapi .sec-closing .ch-inner::before { display: none; }
 
@@ -944,6 +933,11 @@ html.sealed .env4 { touch-action: none; }
     content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: var(--t-bg);
     opacity: clamp(0, calc(1 - (1 - var(--pin-p, 0)) * var(--pin, 1) * 2.6), 1);
   }
+  /* Agápi: the lamp stays. What is beside the card becomes the page, and the card's sides melt into it. */
+  .theme-agapi .hero-stage::before {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(50% - var(--stage-w) * 0.5), transparent calc(50% - var(--stage-w) * 0.3), transparent calc(50% + var(--stage-w) * 0.3), #000 calc(50% + var(--stage-w) * 0.5));
+    mask-image: linear-gradient(to right, #000 calc(50% - var(--stage-w) * 0.5), transparent calc(50% - var(--stage-w) * 0.3), transparent calc(50% + var(--stage-w) * 0.3), #000 calc(50% + var(--stage-w) * 0.5));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -952,7 +946,6 @@ html.sealed .env4 { touch-action: none; }
   .venue-art.has-film img { opacity: 1; transition: none; }
   .story img.arrived { animation: none; }
   .venue-art.art-wipe { -webkit-mask-image: none; mask-image: none; }
-  .theme-agapi .hero-stage::after { display: none; }
   .theme-agapi .ch-message::before, .theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::before, .theme-agapi .ch-rsvp::after,
   .theme-agapi .sec-closing::before, .theme-agapi .sec-closing::after { opacity: 1; transform: none; }
 }

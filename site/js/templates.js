@@ -121,19 +121,20 @@
       // Allura: its capital A is a capital. (Great Vibes draws it like a large lowercase a.)
       fonts: G + "family=Allura&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap",
       ornament: "✦",
-      envTint: { paper: "#F4EEE2", flap: "#EBE0CB", seal: "#B8923A" },
-      // An ivory envelope with a gold seal opens into light, doves fly through the clouds, and the film
+      envTint: { paper: "#F4EEE2", flap: "#EBE0CB", seal: "#F1EADB" },
+      // An ivory envelope with a seal of white wax opens into light, doves fly through the clouds, and the film
       // lands in front of the church. On the page the doves cross the sky. With the scroll the camera walks
       // up to the door and through it into light, the lamp of the church appears, and the camera rises to it.
+      // The lamp then hangs over the page: the welcome rises in under it, and the ceremony follows.
       opening: {
-        poster: M + "env-agapi-v2.jpg", video: M + "open-agapi-v2.mp4", videoLight: M + "open-agapi-v2-small.mp4", lands: 6.6,
+        poster: M + "env-agapi-v3.jpg", video: M + "open-agapi-v3.mp4", videoLight: M + "open-agapi-v3-small.mp4", lands: 6.6,
         hero: M + "hero-agapi-v2.jpg", thumb: M + "thumb-agapi-v2.webp", heroVideo: M + "hero-agapi-v2.mp4",
-        heroSeq: M + "seq/hero-agapi-v4/", pin: 2.8,
+        heroSeq: M + "seq/hero-agapi-v5/", pin: 2.4,
         sealPos: { x: 50, y: 50.2 }, sealSize: 20,
       },
       music: M + "music-agapi.mp3",     // original music, made for this theme; plays from the tap that opens the envelope
       photoFrame: "arch",
-      chapters: ["hero", "message", "countdown", "place:0", "section:family", "place:1", "section:dinner", "section:stay",
+      chapters: ["hero", "message", "place:0", "countdown", "section:family", "place:1", "section:dinner", "section:stay",
                  "dresscode", "section:gift", "section:speeches", "photo", "song", "rsvp", "section:closing"],
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "We are getting married", teaser: "With love", countdown: "Not long now",
@@ -145,10 +146,10 @@
       },
       art: {
         divider: `<div class="ag-key" aria-hidden="true"></div>`,
-        // At the ceremony: the lamp of the church in an arched window (its film is in the hero).
-        // After it: a watercolor of the dinner that paints itself.
+        // The ceremony has no picture of its own: the lamp of the church hangs over the page just before it.
+        // The dinner: a watercolor that paints itself.
         place: (p, index, figure) => (index === 0
-          ? figure(M + "lamp-agapi.jpg", { ratio: "4/5", cls: "art-arch" })
+          ? ""
           : figure(M + "dinner-agapi.jpg", { film: M + "seq/dinner-agapi/", ratio: "5/4" })),
       },
     },
