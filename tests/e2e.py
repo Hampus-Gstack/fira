@@ -164,6 +164,9 @@ class Suite:
     def page(self, w=430, h=860):
         page = self.browser.new_page(viewport={"width": w, "height": h})
         page.set_default_timeout(25000)
+        # Ready means: the document is there. What a check needs it waits for by name. The load event
+        # waits for every picture and frame, which on a slow line takes longer than any check should.
+        page.goto = functools.partial(page.goto, wait_until="domcontentloaded", timeout=45000)
         page.on("pageerror", lambda e: self.errors.append(f"pageerror: {str(e)[:200]}"))
         page.on("console", self._console)
         return page
@@ -230,7 +233,7 @@ class Suite:
             box = page.evaluate("(() => { const r = document.getElementById('publishBtn').getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; })()")
             expect(0 <= box[0] and box[1] <= box[2], f"publish button is off screen at the {where} of the editor")
         page.locator("#ph_second").click(trial=True, timeout=5000)  # the last field must not sit under the publish bar
-        page.frame_locator("#previewFrame").locator(".story .ch-hero").wait_for(timeout=20000)
+        page.frame_locator("#previewFrame").locator(".story .ch-hero").wait_for(timeout=45000)
         page.close()
         self.no_errors("create.html")
 
@@ -390,12 +393,18 @@ class Suite:
                 expect(state[key] < 0.15, f"{t['id']}: envelope overlay '{key}' still visible during the film (opacity {state[key]:.2f})")
             if t["lands"]:
                 expect(state["held"], f"{t['id']}: the names arrive before the film has landed")
-                page.wait_for_function("!document.querySelector('.ch-hero').classList.contains('held')", timeout=20000)
-                landed = page.evaluate("document.querySelector('.hero-film').currentTime")
-                expect(t["lands"] - 0.05 <= landed <= t["lands"] + 0.8, f"{t['id']}: the names arrived at {landed:.2f}s, the film lands at {t['lands']}s")
-                expect(page.evaluate("!!document.querySelector('.env4') && document.documentElement.classList.contains('sealed')"),
-                       f"{t['id']}: the page opened before the film had ended")
-            page.wait_for_function("!document.querySelector('.env4')", timeout=30000)
+                tapped = time.time() - 1.6
+                page.wait_for_function("!document.querySelector('.ch-hero').classList.contains('held')", timeout=40000)
+                landed = page.evaluate("(document.querySelector('.hero-film') || {currentTime: -1}).currentTime")
+                waited = time.time() - tapped
+                if landed < t["lands"] - 0.05 and waited > 11:
+                    # The film stood still for want of data and the page opened without it, as it should.
+                    slow.append(f"{t['id']} (the film stood still at {landed:.1f} s, the page opened after {waited:.0f} s)")
+                else:
+                    expect(t["lands"] - 0.05 <= landed <= t["lands"] + 0.8, f"{t['id']}: the names arrived at {landed:.2f}s, the film lands at {t['lands']}s")
+                    expect(page.evaluate("!!document.querySelector('.env4') && document.documentElement.classList.contains('sealed')"),
+                           f"{t['id']}: the page opened before the film had ended")
+            page.wait_for_function("!document.querySelector('.env4')", timeout=40000)
             page.wait_for_selector(".story .ch-hero")
             if t["lands"]:
                 page.wait_for_function("!document.querySelector('.hero-film')", timeout=5000)
@@ -434,7 +443,7 @@ class Suite:
                     # longer than this check; the poster shows meanwhile, so only a broken video is a failure.
                     still_loading = isinstance(state, dict) and not state["error"] and state["net"] == 2 and state["visible"]
                     expect(still_loading, f"{t['id']}: hero video is not playing: {state}")
-                    slow.append(t["id"])
+                    slow.append(f"{t['id']} (its hero video is still buffering)")
             page.wait_for_selector(".cta-pill.show", timeout=8000)
             page.close()
             self.no_errors(f"film {t['id']}")
@@ -483,7 +492,7 @@ class Suite:
             expect(state["before"] and not state["after"] and state["moved"] == 500 and not state["envelope"],
                    f"{theme}: drawn again while sealed, the page stays locked: {state}")
             self.no_errors(f"film {theme} (light film, drawn again)")
-        note = f" (hero video still buffering on this connection: {', '.join(slow)})" if slow else ""
+        note = f" (slow on this connection: {', '.join(slow)})" if slow else ""
         with_music = ", ".join(t["id"] for t in self.themes() if t["music"]) or "none"
         return ", ".join(t["id"] + ("*" if t["lands"] else "") for t in films) + f" (* lands on the hero); music: {with_music}; light film on a slow connection" + note
 

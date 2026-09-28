@@ -1095,24 +1095,24 @@
   let unseal = null;
 
   // Which film to play. The full film needs a line that carries 8 Mbit/s: below that the small one
-  // (`opening.videoLight`) plays without standing still, and on a phone it looks the same. Chrome says
-  // how fast the line is. Other browsers are judged by how fast the picture of the envelope arrived,
-  // which reads low rather than high, because the page fetches other things at the same time.
+  // (`opening.videoLight`) plays without standing still, and on a phone it looks the same.
+  // What the browser says about the line is an estimate and often too kind, so the line is measured:
+  // how fast did the picture of the envelope arrive? A picture that came from the cache says nothing,
+  // and then the browser's word counts.
   function pickFilm(o) {
     if (!o.videoLight) return Promise.resolve(o.video);
     const c = navigator.connection || {};
     if (c.saveData || (c.downlink > 0 && c.downlink < 8) || /(^|-)(2g|3g)$/.test(c.effectiveType || "")) return Promise.resolve(o.videoLight);
-    if (c.downlink > 0) return Promise.resolve(o.video);
     return new Promise((resolve) => {
       const img = new Image();
       let timer = 0;
       const done = (src) => { clearTimeout(timer); resolve(src); };
       timer = setTimeout(() => done(o.videoLight), 2500);        // still on its way: slow
       img.onload = () => {
-        const e = (performance.getEntriesByName(img.src) || []).pop();
-        const bytes = e ? (e.transferSize || 0) : 0, ms = e ? e.responseEnd - e.responseStart : 0;
-        if (bytes < 20000 || ms <= 0) return done(o.video);      // from the cache, or not measured: a second visit
-        done(bytes * 8 / ms < 8000 ? o.videoLight : o.video);
+        const seen = (performance.getEntriesByName(img.src) || []).filter((e) => e.transferSize > 20000 && e.responseEnd > e.responseStart);
+        if (!seen.length) return done(o.video);                  // from the cache: a second visit
+        const kbit = Math.min(...seen.map((e) => e.transferSize * 8 / (e.responseEnd - e.responseStart)));
+        done(kbit < 8000 ? o.videoLight : o.video);
       };
       img.onerror = () => done(o.video);
       img.src = o.poster;
