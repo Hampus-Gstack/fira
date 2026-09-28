@@ -253,16 +253,42 @@
     const films = new Map();
     const clamp = (v) => Math.max(0, Math.min(1, v));
     let ticking = false;
+    let slow = false;                            // a film came too late: the line is for pictures and music
 
     function start(canvas) {                     // fetch a film's frames, once
-      if (!canvas || films.has(canvas)) return;
+      if (!canvas || films.has(canvas) || canvas.dataset.late) return;
       const owner = canvas.closest(".venue-art, .ch-hero");
       if (!Film) { owner.classList.add("nofilm"); return; }
+      if (slow && canvas !== heroCanvas) { still(owner, canvas); return; }
       // Frames arrive when they arrive: every one of them may be the first that can be shown.
       const film = new Film(canvas, canvas.dataset.seq, { concurrency: 3, onprogress: onScroll });
       films.set(canvas, film);
       film.resize();
       film.load().then(() => { film.resize(); update(); }).catch(() => owner.classList.add("nofilm"));
+    }
+
+    // A picture on a slow line: it is shown as a still, and stays one. A picture that turns into a film
+    // under the guest's eyes would be worse.
+    function still(fig, canvas) {
+      const film = films.get(canvas);
+      if (film) film.pause();
+      films.delete(canvas);
+      canvas.dataset.late = "1";
+      fig.classList.remove("filming");
+      fig.classList.add("nofilm");
+    }
+    // Called a moment after a picture came on screen. A quarter of its film is enough to follow the
+    // scroll, the rest arrives meanwhile. With less than that the line is slow: this picture and every
+    // picture that is not ready either are shown as stills, and no more frames are asked for.
+    function judge(canvas) {
+      const enough = (c) => { const f = films.get(c); return !!(f && f.count && f.loaded * 4 >= f.count); };
+      if (enough(canvas)) return;
+      slow = true;
+      arts.forEach((fig) => {
+        const c = fig.querySelector(".art-film");
+        if (c && !c.dataset.late && !enough(c)) still(fig, c);
+      });
+      update();
     }
 
     function update() {
@@ -279,6 +305,7 @@
         const pin = range > 1 ? clamp(-r.top / range) : 0;
         hero.style.setProperty("--pin-p", pin.toFixed(4));
         const film = films.get(heroCanvas);
+        if (film) { if (r.bottom < -vh * 0.5) film.pause(); else film.resume(); }   // left behind: the line is for what is on screen
         if (film && film.count) {
           film.draw(pin * (film.count - 1));
           const filming = pin > 0.004 && film.drawn >= 0;
@@ -291,11 +318,18 @@
       }
       for (const fig of arts) {
         const r = fig.getBoundingClientRect();
-        if (r.bottom < -vh || r.top > vh * 2) continue;
+        const canvas = fig.querySelector(".art-film");
+        let film = films.get(canvas);
+        if (r.bottom < -vh || r.top > vh * 2.5) { if (film) film.pause(); continue; }
+        if (film) film.resume();
         const ap = REDUCED ? 1 : clamp((vh * 0.94 - r.top) / (vh * 0.62));
         fig.style.setProperty("--ap", ap.toFixed(4));
-        const film = films.get(fig.querySelector(".art-film"));
+        if (canvas && ap > 0.01 && !fig.dataset.judged && !fig.classList.contains("nofilm")) {
+          fig.dataset.judged = "1";
+          setTimeout(() => judge(canvas), 700);
+        }
         if (film && film.count) film.draw(ap * (film.count - 1));
+        if (film && film.drawn >= 0) fig.classList.add("drawn");      // its canvas has a picture on it
         fig.classList.toggle("filming", !!film && film.drawn >= 0 && ap < 0.995);
         fig.classList.toggle("done", ap >= 0.995);
       }
@@ -335,6 +369,23 @@
       near.disconnect();
     };
     update();
+  }
+
+  // A picture is shown when all of it has arrived. On a slow line it would otherwise be drawn from the
+  // top down under the guest's eyes, and a painting that fades into the page would show a hard edge.
+  function wholePictures(root) {
+    root.querySelectorAll('img[loading="lazy"]').forEach((img) => {
+      const owner = img.closest("figure");
+      if (img.complete && img.naturalWidth) { if (owner) owner.classList.add("still-in"); return; }
+      const here = () => {
+        img.classList.remove("arriving");
+        img.classList.add("arrived");
+        if (owner) owner.classList.add("still-in");
+      };
+      img.classList.add("arriving");
+      img.addEventListener("load", here, { once: true });
+      img.addEventListener("error", here, { once: true });
+    });
   }
 
   function revealOnScroll(root) {
@@ -1160,9 +1211,15 @@
     // The film goes first. What comes after it (the loop, the frames that follow the scroll) is fetched
     // once the film has arrived in full, or when it has ended.
     let fed = false;
+    let pictureIn = !o.hero, leave = null;         // the picture the film lands on, and the film's way out
     const feed = () => {
       if (fed) return;
       fed = true;
+      if (o.hero) {
+        const picture = new Image();
+        picture.onload = picture.onerror = () => { pictureIn = true; if (leave) leave(); };
+        picture.src = o.hero;
+      }
       if (loop) {
         if (loop.dataset.poster) loop.poster = loop.dataset.poster;
         loop.preload = "auto"; loop.load();
@@ -1195,11 +1252,18 @@
         const p = loop.play();
         if (p && p.catch) p.catch(() => {});
       }
-      film.classList.add("done");
+      // The film rests on its last frame until the picture under it has arrived in full.
+      let left = false;
+      leave = () => {
+        if (left) return;
+        left = true;
+        film.classList.add("done");
+        setTimeout(() => film.remove(), 900);
+      };
+      if (pictureIn) leave(); else setTimeout(leave, 8000);
       env.remove();
       if (unseal) unseal();
       if (soundState.btn && !soundState.song) soundState.btn.remove();   // the film was the only thing with sound
-      setTimeout(() => film.remove(), 900);
       onSettled();
     };
     function open(e) {
@@ -1314,6 +1378,7 @@
       wrap.querySelectorAll(".inv-countdown").forEach((el) => countdown(el, data));
       wireRsvp(wrap, data, opts, theme);
       wireMusic(wrap);
+      wholePictures(wrap);
       revealOnScroll(wrap);
       storyEngine(wrap);
       if (theme.after) theme.after(wrap, data, opts, U);

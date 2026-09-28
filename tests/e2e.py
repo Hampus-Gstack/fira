@@ -498,7 +498,7 @@ class Suite:
 
     def test_scroll(self):
         """Pictures that follow the scroll inside the story: the held hero and the paintings."""
-        seen = []
+        seen, stills = [], []
         for t in self.themes():
             page = self.page()
             page.goto(self.url(f"i.html?demo={t['id']}&embed=1"))
@@ -542,10 +542,17 @@ class Suite:
                     page.wait_for_function(
                         """i => { const f = document.querySelectorAll('.venue-art.has-film')[i];
                                   const ap = parseFloat(getComputedStyle(f).getPropertyValue('--ap'));
-                                  return f.classList.contains('filming') && ap > 0.4 && ap < 0.6; }""", arg=i, timeout=30000)
+                                  return (f.classList.contains('filming') || f.classList.contains('nofilm')) && ap > 0.4 && ap < 0.6; }""", arg=i, timeout=30000)
                 except Exception:
                     seen_frames = fig.evaluate("f => f.querySelector('canvas').width")
-                    raise Check(f"{t['id']}: picture {i + 1} did not start to paint itself: {fig.get_attribute('class')} (canvas {seen_frames} px wide)")
+                    raise Check(f"{t['id']}: picture {i + 1} shows neither its film nor its still: {fig.get_attribute('class')} (canvas {seen_frames} px wide)")
+                if "nofilm" in fig.get_attribute("class"):
+                    # Its frames had not arrived when it came on screen: it is shown as a still. Right on a slow line.
+                    page.wait_for_function("i => { const m = document.querySelectorAll('.venue-art.has-film')[i].querySelector('img'); return m.complete && m.naturalWidth > 0; }", arg=i, timeout=30000)
+                    page.wait_for_timeout(900)
+                    expect(fig.evaluate("f => getComputedStyle(f.querySelector('img')).opacity") == "1", f"{t['id']}: picture {i + 1} fell back to its still, but the still does not show")
+                    stills.append(f"{t['id']} picture {i + 1}")
+                    continue
                 half = fig.evaluate(
                     """f => { const c = f.querySelector('canvas');
                          return { ap: parseFloat(getComputedStyle(f).getPropertyValue('--ap')), still: getComputedStyle(f.querySelector('img')).opacity,
@@ -560,7 +567,8 @@ class Suite:
             page.close()
             self.no_errors(f"scroll {t['id']}")
         expect(seen, "no theme has a picture that follows the scroll")
-        return ", ".join(seen)
+        note = f" (shown as stills on this connection, their frames came too late: {', '.join(stills)})" if stills else ""
+        return ", ".join(seen) + note
 
     def test_seal(self):
         coded = [t for t in self.themes() if not t["film"]]

@@ -763,6 +763,12 @@ html.sealed .env4 { touch-action: none; }
 .venue-art.has-film.done img, .venue-art.has-film.nofilm img { opacity: 1; }
 .art-film { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.5s ease; }
 .venue-art.filming .art-film { opacity: 1; }
+/* until the still has arrived in full, what the film has drawn stays */
+.venue-art.has-film.drawn.done:not(.still-in) .art-film, .venue-art.has-film.drawn.nofilm:not(.still-in) .art-film { opacity: 1; }
+/* a picture is shown when all of it has arrived (wholePictures) */
+.story img.arriving { visibility: hidden; }
+.story img.arrived { animation: img-arrive 0.7s ease both; }
+@keyframes img-arrive { from { opacity: 0; } }
 /* A picture uncovered by the scroll, as if drawn from one side to the other. Its edges fade into the page.
    Both masks are on the figure, which is also what blends: a mask on the picture inside would make
    the picture a layer of its own, and a layer does not blend with the page behind it. */
@@ -927,6 +933,7 @@ html.sealed .env4 { touch-action: none; }
   .hero-staged .ch-inner, .hero-staged .ch-chevron { filter: none; translate: none; }
   .title-ink { -webkit-mask-image: none; mask-image: none; animation: none; }
   .venue-art.has-film img { opacity: 1; transition: none; }
+  .story img.arrived { animation: none; }
   .venue-art.art-wipe { -webkit-mask-image: none; mask-image: none; }
   .theme-agapi .hero-stage::after { display: none; }
   .theme-agapi .ch-message::before, .theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::before, .theme-agapi .ch-rsvp::after,

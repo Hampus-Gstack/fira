@@ -127,7 +127,7 @@
       opening: {
         poster: M + "env-agapi-v2.jpg", video: M + "open-agapi-v2.mp4", videoLight: M + "open-agapi-v2-small.mp4", lands: 6.6,
         hero: M + "hero-agapi-v2.jpg", thumb: M + "thumb-agapi-v2.webp", heroVideo: M + "hero-agapi-v2.mp4",
-        heroSeq: M + "seq/hero-agapi-v2/", pin: 1.1,
+        heroSeq: M + "seq/hero-agapi-v3/", pin: 1.1,
         sealPos: { x: 50, y: 50.2 }, sealSize: 20,
       },
       music: M + "music-agapi.mp3",     // original music, made for this theme; plays from the tap that opens the envelope
@@ -147,7 +147,7 @@
         // At the ceremony: the lamp of the church in an arched window, the camera rising to it with the scroll.
         // After it: a watercolor of the dinner that paints itself.
         place: (p, index, figure) => (index === 0
-          ? figure(M + "lamp-agapi.jpg", { film: M + "seq/lamp-agapi/", ratio: "4/5", cls: "art-arch" })
+          ? figure(M + "lamp-agapi.jpg", { film: M + "seq/lamp-agapi-v2/", ratio: "4/5", cls: "art-arch" })
           : figure(M + "dinner-agapi.jpg", { film: M + "seq/dinner-agapi/", ratio: "5/4" })),
       },
     },

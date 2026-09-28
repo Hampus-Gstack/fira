@@ -1,6 +1,7 @@
 /* Fira scroll film: a film cut into frames (theme-assets skill, `encode.py frames`), drawn on a canvas
    at the position the page asks for. Frames arrive coarse to fine, so the film can be scrubbed long
-   before all of it has loaded. No dependencies. */
+   before all of it has loaded. A film that is far from the screen can be told to pause its fetching,
+   so that the line is free for what the guest is looking at. No dependencies. */
 (function () {
   "use strict";
 
@@ -27,6 +28,9 @@
     this.ready = null;
     this.drawn = -1;       // the frame on screen
     this.position = 0;     // the frame that was asked for
+    this.paused = false;   // no new frames are asked for while this is true
+    this.active = 0;       // frames on their way
+    this._pump = null;
   }
 
   ScrollFilm.prototype.load = function () {
@@ -41,30 +45,43 @@
         self.ready = new Uint8Array(m.count);
         const queue = loadOrder(m.count);
         const name = (i) => self.base + String(i).padStart(m.pad || 3, "0") + "." + (m.ext || "webp");
-        const next = () => {
-          const i = queue.shift();
-          if (i === undefined) return;
+        const one = (i) => {
           const img = new Image();
           let retried = false;
+          const over = () => { self.active--; self._pump(); };
           img.decoding = "async";
           img.onload = () => {
             self.frames[i] = img; self.ready[i] = 1; self.loaded++;
             const closer = self.drawn < 0 || Math.abs(i - self.position) < Math.abs(self.drawn - self.position);
             if (closer) self.draw(self.position, true);
             if (self.options.onprogress) self.options.onprogress(self.loaded, self.count);
-            next();
+            over();
           };
           img.onerror = () => {
-            if (retried) return next();   // the neighbours stand in for a frame that never arrives
+            if (retried) return over();   // the neighbours stand in for a frame that never arrives
             retried = true;
             setTimeout(() => { img.src = name(i) + "?retry"; }, 1500);
           };
           img.src = name(i);
         };
-        for (let k = 0; k < self.options.concurrency; k++) next();
+        self._pump = () => {
+          while (!self.paused && self.active < self.options.concurrency && queue.length) {
+            self.active++;
+            one(queue.shift());
+          }
+        };
+        self._pump();
         return m;
       });
     return this._loading;
+  };
+
+  // Stop asking for frames (those on their way still arrive), and ask again.
+  ScrollFilm.prototype.pause = function () { this.paused = true; };
+  ScrollFilm.prototype.resume = function () {
+    if (!this.paused) return;
+    this.paused = false;
+    if (this._pump) this._pump();
   };
 
   ScrollFilm.prototype.nearest = function (i) {
