@@ -114,6 +114,34 @@ def served_as_image(url):
         return False
 
 
+PATIENCE = 1.0   # how many times longer than usual a wait may take; set from the speed of the line
+
+
+def measure_line(base):
+    """Mbit/s of this machine's line to the site, from the first 400 kB of an opening film. None if unknown."""
+    import re
+    film = re.search(r'"(open-[a-z0-9-]+\.mp4)"', (SITE / "js" / "templates.js").read_text())
+    if not film:
+        return None
+    try:
+        req = urllib.request.Request(f"{base}/media/{film.group(1)}?t={int(time.time())}", headers={"Range": "bytes=0-399999"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            started = time.time()
+            size = len(r.read())
+        return size * 8 / max(time.time() - started, 0.001) / 1e6
+    except Exception:
+        return None
+
+
+def patient(wait):
+    """The same wait, with a time limit that fits the line."""
+    @functools.wraps(wait)
+    def inner(*a, **k):
+        k["timeout"] = k.get("timeout", 25000) * PATIENCE
+        return wait(*a, **k)
+    return inner
+
+
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -163,10 +191,13 @@ class Suite:
 
     def page(self, w=430, h=860):
         page = self.browser.new_page(viewport={"width": w, "height": h})
-        page.set_default_timeout(25000)
+        page.set_default_timeout(25000 * PATIENCE)
         # Ready means: the document is there. What a check needs it waits for by name. The load event
         # waits for every picture and frame, which on a slow line takes longer than any check should.
-        page.goto = functools.partial(page.goto, wait_until="domcontentloaded", timeout=45000)
+        page.goto = functools.partial(page.goto, wait_until="domcontentloaded", timeout=45000 * PATIENCE)
+        if PATIENCE > 1:
+            page.wait_for_function = patient(page.wait_for_function)
+            page.wait_for_selector = patient(page.wait_for_selector)
         page.on("pageerror", lambda e: self.errors.append(f"pageerror: {str(e)[:200]}"))
         page.on("console", self._console)
         return page
@@ -861,6 +892,14 @@ def main():
         else:
             base = PROD if args.base == "prod" else args.base.rstrip("/")
         print(f"Fira e2e against {base} (API {API})")
+        if args.base != "local":
+            # A check that waits for a film says nothing on a line that cannot carry the film in that time.
+            global PATIENCE
+            mbit = measure_line(base)
+            if mbit is not None and mbit < 8:
+                PATIENCE = min(10.0, 8 / max(mbit, 0.1))
+            print("line to the site: " + ("unknown" if mbit is None else f"{mbit:.1f} Mbit/s")
+                  + (f", so every wait may take {PATIENCE:.1f} times as long" if PATIENCE > 1 else ""))
         p = stack.enter_context(sync_playwright())
         browser = p.chromium.launch(headless=True, args=["--autoplay-policy=no-user-gesture-required"])
         suite = Suite(browser, base, args.invite)
