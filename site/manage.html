@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/site.css?v=20260928c">
+<link rel="stylesheet" href="css/site.css?v=20260928d">
 <style>
   .tally { display: grid; gap: 8px; margin: 0 0 24px; }
   .tally div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 18px; font-size: 15px; }
@@ -29,9 +29,9 @@
   <div class="dash-empty"><p>Loading…</p></div>
 </div>
 
-<script src="js/config.js?v=20260928c"></script>
-<script src="js/api.js?v=20260928c"></script>
-<script src="js/templates.js?v=20260928c"></script>
+<script src="js/config.js?v=20260928d"></script>
+<script src="js/api.js?v=20260928d"></script>
+<script src="js/templates.js?v=20260928d"></script>
 <script>
 (async function () {
   const dash = document.getElementById("dash");
@@ -93,7 +93,9 @@
     const no = rsvps.filter((r) => r.attending === "no");
     const guests = yes.reduce((n, r) => n + (r.party_size || 1), 0);
     const base = location.href.replace(/manage\.html.*$/, "");
-    const shareUrl = base + "i.html?id=" + id;
+    const direct = base + "i.html?id=" + encodeURIComponent(id);
+    const shareUrl = FIRA_CONFIG.SHARE_BASE ? FIRA_CONFIG.SHARE_BASE + encodeURIComponent(id) : direct;
+    const personal = (name) => shareUrl + (shareUrl.includes("?") ? "&" : "?") + "to=" + encodeURIComponent(name);
     const qLabels = [...new Set(rsvps.flatMap((r) => Object.keys(r.answers || {})))];
 
     // What the kitchen needs: how many of each choice, counted over the guests who are coming.
@@ -157,11 +159,11 @@
       const names = document.getElementById("plNames").value.split("\n").map((s) => s.trim()).filter(Boolean);
       out.innerHTML = names.map((n) =>
         `<div style="display:flex;gap:8px;align-items:center">
-          <input readonly value="${esc(shareUrl + "&to=" + encodeURIComponent(n))}" style="flex:1;padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px">
+          <input readonly value="${esc(personal(n))}" style="flex:1;padding:8px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px">
           <button class="btn btn-ghost" data-pl="${esc(n)}" style="padding:7px 14px;font-size:13px">${W.copy}</button>
         </div>`).join("") || `<p style="font-size:13px;color:var(--ink-soft)">${W.addName}</p>`;
       out.querySelectorAll("[data-pl]").forEach((b) => b.addEventListener("click", () => {
-        navigator.clipboard.writeText(shareUrl + "&to=" + encodeURIComponent(b.dataset.pl));
+        navigator.clipboard.writeText(personal(b.dataset.pl));
         b.textContent = W.copied; setTimeout(() => (b.textContent = W.copy), 1400);
       }));
     });

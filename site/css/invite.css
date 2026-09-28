@@ -319,6 +319,19 @@
 .sec-block + .sec-block { margin-top: 30px; }
 .sec-h3 { font-family: var(--t-display), serif; font-weight: var(--t-display-weight, 600); font-size: 28px; line-height: 1.15; margin: 0 0 10px; color: var(--t-accent); }
 .sec-lines { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 19px; }
+/* cards in a section: a small picture, a name, a line of text */
+.sec-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 16px; max-width: 470px; margin: 24px auto 0; }
+.sec-cards.n1 { grid-template-columns: minmax(0, 250px); justify-content: center; }
+.sec-cards.n3 .sec-card:last-child { grid-column: 1 / -1; justify-self: center; width: calc(50% - 8px); }
+.sec-card { display: block; color: inherit; text-decoration: none; text-align: center; }
+.sc-art { margin: 0 0 8px; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px; }
+.sc-art img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.7s ease; }
+a.sec-card:hover .sc-art img { transform: scale(1.05); }
+.sc-title { display: block; font-weight: 600; font-size: 18px; line-height: 1.2; }
+.sc-text { display: block; font-size: 14.5px; line-height: 1.4; opacity: 0.82; margin-top: 3px; }
+.sc-link { display: inline-block; margin-top: 8px; padding-bottom: 2px; font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--t-accent); border-bottom: 1px solid currentColor; }
+.ph-title { position: relative; z-index: 3; text-align: center; font-family: var(--t-display), serif; font-size: clamp(38px, 9vw, 52px); line-height: 1.1; margin: 26px 0 0; }
+.dc-title { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.75; margin: 26px 0 0; }
 .sb-signature .sec-lines, .sb-signature .inv-p { font-family: var(--t-display), serif; font-size: clamp(34px, 8vw, 46px); line-height: 1.15; }
 .sb-quote .inv-p { font-style: italic; opacity: 0.85; }
 .music-list { display: grid; gap: 12px; max-width: 460px; margin: 18px auto 0; }
@@ -508,16 +521,17 @@
   --ag-gold: #B8923A; --ag-gold-soft: #E6CB7E; --ag-terra: #B5533C; --ag-olive: #7E8B5A;
   --t-bg: var(--ag-ivory); --t-ink: var(--ag-blue); --t-accent: var(--ag-gold);
   --env-paper: #F3E9D7; --env-flap: #EBE0CB; --env-seal: #E9DFC8;
-  --t-display: "Great Vibes"; --t-body: "EB Garamond"; --t-display-weight: 400; --t-sub-style: normal;
+  --ag-night: #1D3557;
+  --t-display: "Allura"; --t-body: "EB Garamond"; --t-display-weight: 400; --t-sub-style: normal;
   --t-env-addr: #5E3A31; --t-env-addr-shadow: 0 0 14px rgba(255,255,255,0.95), 0 0 4px rgba(255,255,255,0.9);
-  --t-addr-style: normal; --t-addr-size: clamp(30px, 7.6vw, 46px); --t-seal-ink: #7A5A3E; --t-hint-size: 17px;
+  --t-addr-style: normal; --t-addr-size: clamp(34px, 8.6vw, 52px); --t-seal-ink: #5B4312; --t-hint-size: 19px;
   --t-env-hint: #5E3A31; --t-env-hint-shadow: 0 0 12px rgba(255,255,255,0.95), 0 0 3px rgba(255,255,255,0.9);
   --t-chevron: var(--ag-gold); --t-msg-font: "EB Garamond"; --t-msg-size: 20px; --t-cd-font: "EB Garamond"; --t-tl-font: "EB Garamond";
 }
 .theme-agapi .inv-stage { background: var(--ag-ivory); font-size: 18px; }
 
 .theme-agapi .inv-eyebrow { font-size: 14px; letter-spacing: 0.36em; color: #96752A; opacity: 1; margin-bottom: 14px; }
-.theme-agapi .inv-title { font-size: clamp(60px, 15.5vw, 112px); line-height: 1; margin-bottom: 6px; color: var(--ag-blue); }
+.theme-agapi .inv-title { font-size: clamp(50px, calc(var(--stage-w, 100vw) * 0.164), 124px); line-height: 1; margin-bottom: 6px; color: var(--ag-blue); }
 .theme-agapi .inv-date { font-family: "EB Garamond", serif; font-size: clamp(15px, 4.1vw, 19px); letter-spacing: 0.13em; text-transform: uppercase; text-wrap: balance; margin-top: 16px; }
 .theme-agapi .inv-hero-note { font-style: italic; font-size: 20px; margin-top: 4px; color: #96752A; opacity: 1; }
 .ag-key { width: 132px; height: 11px; margin: 14px auto 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 10'%3E%3Cpath d='M0,9 H120 M16,9 V1 H4 V5.5 H11 M36,9 V1 H24 V5.5 H31 M56,9 V1 H44 V5.5 H51 M76,9 V1 H64 V5.5 H71 M96,9 V1 H84 V5.5 H91 M116,9 V1 H104 V5.5 H111' fill='none' stroke='%23B8923A' stroke-width='1.3' stroke-linecap='square'/%3E%3C/svg%3E") center / contain no-repeat; }
@@ -535,16 +549,16 @@
   --t-input-bg: rgba(255,255,255,0.08); --t-input-border: rgba(255,255,255,0.34);
   --t-btn-bg: var(--ag-gold-soft); --t-btn-ink: var(--ag-deep);
 }
-.theme-agapi .inv-h2 { font-size: clamp(38px, 9vw, 54px); line-height: 1.1; margin-bottom: 22px; }
+.theme-agapi .inv-h2 { font-size: clamp(44px, 10.5vw, 62px); line-height: 1.05; margin-bottom: 22px; }
 .theme-agapi .inv-h2::after { content: ""; display: block; width: 120px; height: 10px; margin: 12px auto 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 10'%3E%3Cpath d='M0,9 H120 M16,9 V1 H4 V5.5 H11 M36,9 V1 H24 V5.5 H31 M56,9 V1 H44 V5.5 H51 M76,9 V1 H64 V5.5 H71 M96,9 V1 H84 V5.5 H91 M116,9 V1 H104 V5.5 H111' fill='none' stroke='%23B8923A' stroke-width='1.3' stroke-linecap='square'/%3E%3C/svg%3E") center / contain no-repeat; }
 .theme-agapi .ch-countdown .inv-h2::after, .theme-agapi .ch-rsvp .inv-h2::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 10'%3E%3Cpath d='M0,9 H120 M16,9 V1 H4 V5.5 H11 M36,9 V1 H24 V5.5 H31 M56,9 V1 H44 V5.5 H51 M76,9 V1 H64 V5.5 H71 M96,9 V1 H84 V5.5 H91 M116,9 V1 H104 V5.5 H111' fill='none' stroke='%23E6CB7E' stroke-width='1.3' stroke-linecap='square'/%3E%3C/svg%3E"); }
 .theme-agapi .inv-p { font-size: 19px; line-height: 1.65; }
 .theme-agapi .msg-line { line-height: 1.65; }
 .theme-agapi .msg-mark { display: none; }
-.theme-agapi .sec-h3 { font-size: 32px; color: var(--ag-terra); }
-.theme-agapi .sec-lead { font-size: 34px; color: var(--ag-terra); }
+.theme-agapi .sec-h3 { font-size: 38px; color: var(--ag-terra); }
+.theme-agapi .sec-lead { font-size: 40px; color: var(--ag-terra); }
 .theme-agapi .sec-lines { font-size: 20px; }
-.theme-agapi .sb-signature .sec-lines, .theme-agapi .sb-signature .inv-p { font-size: clamp(40px, 10vw, 54px); line-height: 1.15; color: var(--ag-blue); }
+.theme-agapi .sb-signature .sec-lines, .theme-agapi .sb-signature .inv-p { font-size: clamp(48px, 12vw, 64px); line-height: 1.1; color: var(--ag-blue); }
 .theme-agapi .sb-quote .inv-p { font-size: 18px; max-width: 360px; color: #96752A; opacity: 1; }
 .theme-agapi .pl-date { color: #96752A; opacity: 1; }
 .theme-agapi .pl-time { font-size: 34px; }
@@ -559,7 +573,7 @@
 .theme-agapi .rf-send { font-family: "EB Garamond", serif; font-size: 17px; letter-spacing: 0.14em; }
 .theme-agapi .rf-field > span { font-size: 13px; }
 .theme-agapi .rf-deadline { font-size: 18px; opacity: 1; color: var(--ag-gold-soft); letter-spacing: 0.04em; }
-.theme-agapi .rf-done { font-size: 34px; }
+.theme-agapi .rf-done { font-size: 40px; }
 .theme-agapi .cta-pill { background: var(--ag-blue); color: #fff; font-family: "EB Garamond", serif; font-size: 15px; letter-spacing: 0.16em; box-shadow: 0 12px 30px rgba(21,39,74,0.35); }
 .theme-agapi .sec-closing { padding-bottom: 12vh; }
 .theme-agapi .sec-closing .ch-inner::before { content: ""; display: block; width: 132px; height: 11px; margin: 0 auto 30px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 10'%3E%3Cpath d='M0,9 H120 M16,9 V1 H4 V5.5 H11 M36,9 V1 H24 V5.5 H31 M56,9 V1 H44 V5.5 H51 M76,9 V1 H64 V5.5 H71 M96,9 V1 H84 V5.5 H91 M116,9 V1 H104 V5.5 H111' fill='none' stroke='%23B8923A' stroke-width='1.3' stroke-linecap='square'/%3E%3C/svg%3E") center / contain no-repeat; }
@@ -720,7 +734,7 @@
    reaches far, so the ink has a box of its own that is wider than the line (the margins take it back).
    `written` (set when the writing is done) lifts the mask. */
 .title-ink {
-  display: inline-block; padding: 0.4em 0.5em; margin: -0.4em -0.5em;
+  display: inline-block; padding: 0.4em 0.25em; margin: -0.4em -0.25em;
   -webkit-mask-image: linear-gradient(100deg, #000 0%, #000 44%, transparent 56%, transparent 100%);
   mask-image: linear-gradient(100deg, #000 0%, #000 44%, transparent 56%, transparent 100%);
   -webkit-mask-size: 260% 100%; mask-size: 260% 100%;
@@ -767,30 +781,114 @@ html.sealed .env4 { touch-action: none; }
 /* Château */
 .theme-chateau .hero-stage { padding: 14vh 0 12vh; }
 
-/* Agápi: the lamp of the church, the names in the light below it */
+/* Agápi: the names in the sky above the church */
 .theme-agapi .hero-stage { place-items: start center; padding: 0; }
-.theme-agapi .hero-staged .ch-inner { margin-top: 50vh; margin-top: 50dvh; padding-bottom: 0; }
-.theme-agapi .hero-staged { --t-hero-ink: var(--ag-blue); --t-hero-title-shadow: 0 0 22px rgba(255, 248, 232, 0.9); }
-.theme-agapi .hero-staged .hero-scrim { background: linear-gradient(180deg, transparent 38%, rgba(251, 243, 226, 0.55) 56%, rgba(251, 243, 226, 0.7) 100%); }
-.theme-agapi .hero-staged .inv-eyebrow, .theme-agapi .hero-staged .inv-hero-note { color: #7A5C1E; }
-/* While the hero is held, the page rises into it from below: ivory climbs the screen and the lamp is
-   the last thing to leave. The chapter that follows is ivory too, so there is no edge between them. */
+.theme-agapi .hero-staged .ch-inner { margin-top: 6.5vh; margin-top: 6.5dvh; padding: 0 20px; }
+.theme-agapi .hero-staged { --t-hero-ink: #FFFFFF; --t-hero-title-shadow: 0 2px 24px rgba(16, 44, 92, 0.6), 0 1px 3px rgba(16, 44, 92, 0.35); }
+.theme-agapi .hero-staged .hero-scrim { background: linear-gradient(180deg, rgba(22, 56, 108, 0.36) 0%, rgba(22, 56, 108, 0.14) 30%, transparent 47%); }
+.theme-agapi .hero-staged .inv-title { color: #FFFFFF; }
+.theme-agapi .hero-staged .inv-eyebrow { color: #FFFFFF; text-shadow: 0 1px 8px rgba(16, 44, 92, 0.55); margin-bottom: 8px; }
+.theme-agapi .hero-staged .inv-date { color: #FFFFFF; text-shadow: 0 1px 8px rgba(16, 44, 92, 0.6); margin-top: 12px; }
+.theme-agapi .hero-staged .inv-hero-note { color: #FFF3D2; text-shadow: 0 1px 8px rgba(16, 44, 92, 0.6); }
+.theme-agapi .hero-staged .ag-key { filter: brightness(0) invert(1); opacity: 0.9; margin-top: 4px; }
+.theme-agapi .hero-staged .ch-chevron { color: #FFFFFF; }
+/* While the hero is held, the page rises into it from below: ivory climbs the screen.
+   The chapter that follows is ivory too, so there is no edge between them. */
 .theme-agapi .hero-stage::after {
   content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background: linear-gradient(to top, var(--ag-ivory) 0%, var(--ag-ivory) calc(var(--pin-p, 0) * 56%), rgba(251, 247, 238, 0) calc(var(--pin-p, 0) * 56% + 46%));
-  opacity: clamp(0, calc(var(--pin-p, 0) * 2.6), 1);
+  opacity: clamp(0, calc(var(--pin-p, 0) * 2.6 - 0.5), 1);
 }
 /* the envelope is light: what is written on it is dark, with light behind it */
 .theme-agapi .env4-scrim { background: linear-gradient(180deg, rgba(255, 252, 245, 0.45) 0%, rgba(255, 252, 245, 0) 27%, rgba(255, 252, 245, 0) 74%, rgba(255, 252, 245, 0.55) 100%); }
-.theme-agapi .env4-mono { color: #EBD9A2; text-shadow: 0 1px 2px rgba(10, 20, 50, 0.55); opacity: 0.95; }
+.theme-agapi .env4-mono { color: #5B4312; text-shadow: 0 1px 0 rgba(255, 238, 190, 0.65), 0 -1px 0 rgba(60, 40, 0, 0.18); opacity: 0.92; font-size: calc(var(--seal-w) * 0.4); }
+
+/* paintings on paper: the paper has no edge, the painting fades into the page on all four sides.
+   `multiply` reaches the chapter's colour only if nothing in between starts a layer of its own. */
+.theme-agapi .ch:not(.ch-hero) .ch-inner { z-index: auto; }
 .theme-agapi .venue-art { --t-venue-blend: multiply; max-width: 460px; }
-/* the sheet of paper has no edge: the painting fades into the page on all four sides */
-.theme-agapi .venue-art.has-film {
+.theme-agapi .venue-art.has-film, .theme-agapi .dc-img, .theme-agapi .sc-art {
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%);
   mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%);
   -webkit-mask-composite: source-in; mask-composite: intersect;
 }
 .theme-agapi .band-b .venue-art, .theme-agapi .band-a .venue-art { margin-bottom: 18px; }
+.theme-agapi .dc-img { max-width: 400px; mix-blend-mode: multiply; }
+.theme-agapi .dc-images { margin-top: 8px; }
+.theme-agapi .dc-palette { gap: 14px; margin-top: 12px; }
+.theme-agapi .dc-swatch i { width: 36px; height: 36px; box-shadow: 0 0 0 2px var(--t-bg), 0 0 0 3px color-mix(in srgb, var(--ag-gold) 70%, transparent), 0 5px 12px rgba(31, 53, 89, 0.16); }
+.theme-agapi .sc-art { border-radius: 0; mix-blend-mode: multiply; margin-bottom: 2px; }
+.theme-agapi .sc-title { font-family: "Allura", cursive; font-weight: 400; font-size: 34px; line-height: 1; color: var(--ag-terra); }
+.theme-agapi .sc-text { font-size: 15.5px; }
+.theme-agapi .sc-link { color: #96752A; }
+.theme-agapi .sec-block + .sec-block { margin-top: 44px; }
+
+/* the lamp of the church, in an arched window at the ceremony */
+.theme-agapi .venue-art.art-arch {
+  max-width: min(72vw, 330px); border-radius: 999px 999px 10px 10px; overflow: hidden; margin: 6px auto 38px;
+  mix-blend-mode: normal; -webkit-mask-image: none; mask-image: none; background: #E9DDC6;
+  box-shadow: 0 0 0 5px var(--ag-ivory), 0 0 0 6.5px var(--ag-gold), 0 0 0 13px var(--ag-ivory),
+              0 0 0 14px color-mix(in srgb, var(--ag-gold) 55%, transparent), 0 26px 60px rgba(31, 53, 89, 0.2);
+}
+.theme-agapi .venue-art.art-arch img { width: 100%; height: 100%; object-fit: cover; }
+.theme-agapi .ph-title { color: var(--ag-blue); }
+.theme-agapi .ph-caption { font-style: normal; font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: #96752A; opacity: 1; margin-top: 4px; }
+.theme-agapi .ch-photo { min-height: 0; padding-bottom: 10vh; }
+
+/* Flowers in the corners of a chapter. One picture, shown as two halves: on a phone they meet in the
+   middle, on a wide screen each sits in its own corner. They open as the chapter arrives
+   (--p is the chapter's way through the screen). */
+.theme-agapi .ch-message::before, .theme-agapi .ch-message::after,
+.theme-agapi .ch-rsvp::before, .theme-agapi .ch-rsvp::after,
+.theme-agapi .sec-closing::before, .theme-agapi .sec-closing::after {
+  --fw: min(100vw, 760px);
+  content: ""; position: absolute; z-index: 0; pointer-events: none;
+  width: calc(var(--fw) / 2); height: calc(var(--fw) * 0.6667);
+  background-repeat: no-repeat; background-size: var(--fw) auto;
+  opacity: clamp(0, calc(var(--p, 1) * 7 - 0.3), 1);
+  transform: scale(calc(1.12 - clamp(0, var(--p, 1) * 0.8, 0.12)));
+}
+.theme-agapi .ch-message::before, .theme-agapi .ch-rsvp::before { top: 0; left: 0; background-position: left top; transform-origin: top left; }
+.theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::after { top: 0; right: 0; background-position: right top; transform-origin: top right; }
+.theme-agapi .sec-closing::before { bottom: 0; left: 0; background-position: left bottom; transform-origin: bottom left; }
+.theme-agapi .sec-closing::after { bottom: 0; right: 0; background-position: right bottom; transform-origin: bottom right; }
+.theme-agapi .ch-message::before, .theme-agapi .ch-message::after {
+  mix-blend-mode: multiply; background-image: url("../media/flowers-agapi-top.jpg");
+  -webkit-mask-image: linear-gradient(#000 72%, transparent 100%); mask-image: linear-gradient(#000 72%, transparent 100%);
+}
+.theme-agapi .sec-closing::before, .theme-agapi .sec-closing::after {
+  mix-blend-mode: multiply; background-image: url("../media/flowers-agapi-bottom.jpg");
+  -webkit-mask-image: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); mask-image: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%);
+  opacity: clamp(0, calc(var(--p, 1) * 3 - 0.6), 1);
+}
+.theme-agapi .ch-rsvp::before, .theme-agapi .ch-rsvp::after {
+  background-image: url("../media/flowers-agapi-blue-top.jpg");
+  -webkit-mask-image: linear-gradient(#000 62%, transparent 100%); mask-image: linear-gradient(#000 62%, transparent 100%);
+}
+/* On a wide screen the two halves stand apart, so each also fades toward the middle of the page. */
+@media (min-width: 761px) {
+  .theme-agapi .ch-message::before, .theme-agapi .ch-rsvp::before, .theme-agapi .sec-closing::before {
+    -webkit-mask-image: var(--fade-y), linear-gradient(to right, #000 62%, transparent 100%);
+    mask-image: var(--fade-y), linear-gradient(to right, #000 62%, transparent 100%);
+    -webkit-mask-composite: source-in; mask-composite: intersect;
+  }
+  .theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::after, .theme-agapi .sec-closing::after {
+    -webkit-mask-image: var(--fade-y), linear-gradient(to left, #000 62%, transparent 100%);
+    mask-image: var(--fade-y), linear-gradient(to left, #000 62%, transparent 100%);
+    -webkit-mask-composite: source-in; mask-composite: intersect;
+  }
+  .theme-agapi .ch-message { --fade-y: linear-gradient(#000 72%, transparent 100%); }
+  .theme-agapi .ch-rsvp { --fade-y: linear-gradient(#000 62%, transparent 100%); }
+  .theme-agapi .sec-closing { --fade-y: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); }
+}
+.theme-agapi .ch.ch-rsvp { background: linear-gradient(180deg, var(--ag-night) 0%, var(--ag-night) 46%, var(--ag-deep) 100%); }
+.theme-agapi .ch.ch-message, .theme-agapi .ch.ch-rsvp { padding-top: calc(34px + min(52vw, 400px)); }
+.theme-agapi .ch.sec-closing { padding-bottom: min(62vw, 470px); }
+@media (min-width: 1400px) {     /* the flowers stand beside the text, not above it */
+  .theme-agapi .ch.ch-message, .theme-agapi .ch.ch-rsvp { padding-top: calc(34px + 17vh); }
+  .theme-agapi .ch.sec-closing { padding-bottom: 30vh; }
+}
+.theme-agapi .sec-closing .ch-inner::before { display: none; }
 
 /* Wide screens: the films are portrait, so the hero is a portrait card in the middle of the screen.
    Beside it is the same picture out of focus: the envelope while it is sealed, then the view it opens to. */
@@ -828,4 +926,6 @@ html.sealed .env4 { touch-action: none; }
   .venue-art.has-film img { opacity: 1; transition: none; }
   .venue-art.art-wipe { -webkit-mask-image: none; mask-image: none; }
   .theme-agapi .hero-stage::after { display: none; }
+  .theme-agapi .ch-message::before, .theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::before, .theme-agapi .ch-rsvp::after,
+  .theme-agapi .sec-closing::before, .theme-agapi .sec-closing::after { opacity: 1; transform: none; }
 }

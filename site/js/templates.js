@@ -118,19 +118,22 @@
     agapi: {
       id: "agapi", name: "Agápi", occasion: "Wedding · Greek",
       swatch: ["#FBF7EE", "#1F3559", "#B8923A"],
-      fonts: G + "family=Great+Vibes&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap",
+      // Allura: its capital A is a capital. (Great Vibes draws it like a large lowercase a.)
+      fonts: G + "family=Allura&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap",
       ornament: "✦",
-      envTint: { paper: "#F4EEE2", flap: "#EBE0CB", seal: "#1F3559" },
-      // An ivory envelope with a blue seal opens into the light of a church lamp.
+      envTint: { paper: "#F4EEE2", flap: "#EBE0CB", seal: "#B8923A" },
+      // An ivory envelope with a gold seal opens into light, doves fly through the clouds, and the film
+      // lands in front of the church. On the page the doves cross the sky, and the camera walks up to the door.
       opening: {
-        poster: M + "env-agapi.jpg", video: M + "open-agapi.mp4", videoLight: M + "open-agapi-small.mp4", lands: 5.2,
-        hero: M + "hero-agapi.jpg", thumb: M + "thumb-agapi.webp", heroVideo: M + "hero-agapi.mp4",
-        heroSeq: M + "seq/hero-agapi/", pin: 1.1,
-        sealPos: { x: 50, y: 50 }, sealSize: 21,
+        poster: M + "env-agapi-v2.jpg", video: M + "open-agapi-v2.mp4", videoLight: M + "open-agapi-v2-small.mp4", lands: 6.6,
+        hero: M + "hero-agapi-v2.jpg", thumb: M + "thumb-agapi-v2.webp", heroVideo: M + "hero-agapi-v2.mp4",
+        heroSeq: M + "seq/hero-agapi-v2/", pin: 1.1,
+        sealPos: { x: 50, y: 50.2 }, sealSize: 20,
       },
+      music: M + "music-agapi.mp3",     // original music, made for this theme; plays from the tap that opens the envelope
       photoFrame: "arch",
       chapters: ["hero", "message", "countdown", "place:0", "section:family", "place:1", "section:dinner", "section:stay",
-                 "section:dress", "section:gift", "section:speeches", "music", "photo", "rsvp", "section:closing"],
+                 "dresscode", "section:gift", "section:speeches", "photo", "rsvp", "section:closing"],
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "We are getting married", teaser: "With love", countdown: "Not long now",
         yes: "Yes, I will attend", no: "No, I can't attend", cta: "RSVP",
@@ -141,9 +144,10 @@
       },
       art: {
         divider: `<div class="ag-key" aria-hidden="true"></div>`,
-        // Watercolors that paint themselves as the guest scrolls to them: the church, then the dinner.
+        // At the ceremony: the lamp of the church in an arched window, the camera rising to it with the scroll.
+        // After it: a watercolor of the dinner that paints itself.
         place: (p, index, figure) => (index === 0
-          ? figure(M + "church-agapi.jpg", { film: M + "seq/church-agapi/", ratio: "3/2" })
+          ? figure(M + "lamp-agapi.jpg", { film: M + "seq/lamp-agapi/", ratio: "4/5", cls: "art-arch" })
           : figure(M + "dinner-agapi.jpg", { film: M + "seq/dinner-agapi/", ratio: "5/4" })),
       },
     },
@@ -386,7 +390,6 @@
         { key: "stay", title: "Boende", blocks: [
           { text: "Det finns flera fina hotell i gamla stan, på gångavstånd från kyrkan.",
             buttons: [{ label: "Hotell i Nafplio", url: "https://www.google.com/maps/search/?api=1&query=hotels+Nafplio" }] } ] },
-        { key: "dress", title: "Klädkod", lead: "Sommarfin", blocks: [{ text: "Luftigt och festligt. Kvällarna är varma." }] },
         { key: "gift", title: "Gåva", blocks: [{ text: "Att ni kommer är gåva nog.\nVill ni ändå ge något blir vi glada för ett bidrag till vår bröllopsresa." }] },
         { key: "speeches", title: "Tal & hälsningar", blocks: [
           { text: "Vill ni hålla tal eller sjunga något under kvällen? Hör av er till vår toastmaster i god tid." } ] },
@@ -394,11 +397,13 @@
           { text: "Vi längtar efter att få skratta, äta och dansa med er." },
           { style: "signature", lines: ["Eleni & Markus"] } ] },
       ],
-      music: [
-        { title: "Extraordinary Moment", artist: "ChillØut, Soul Frequency, D'Michel Leb", spotify: "https://open.spotify.com/track/3F42efYjs67eHIFhgz2r6S" },
-        { title: "Orchestra Love Story", artist: "Syed Saiful Mujtahid", spotify: "https://open.spotify.com/track/1Y5nb9F1LvIA6j90oqjDsa" },
-      ],
-      photoUrl: M + "couple-toscana.jpg",
+      dressCode: {
+        title: "Klädkod", lead: "Sommarfin", text: "Luftigt och festligt. Kvällarna är varma.",
+        paletteTitle: "Färger att inspireras av",
+        palette: [{ color: "#8FA8C4" }, { color: "#A9B48F" }, { color: "#C9826B" }, { color: "#E4C9A0" }, { color: "#2F4A73" }],
+        images: [{ url: M + "dress-agapi.jpg" }],
+      },
+      photoUrl: M + "couple-toscana.jpg", photoTitle: "Eleni & Markus",
       rsvpIntro: "Vi vill gärna veta om ni kommer.", rsvpDeadline: "2027-06-15",
       questions: [
         { type: "choice", perGuest: true, label: "Matval", options: ["Kött", "Kyckling", "Vegetariskt", "Veganskt"] },

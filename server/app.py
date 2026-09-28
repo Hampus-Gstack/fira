@@ -1,19 +1,24 @@
 """Fira — invitation + RSVP API.
 
-FastAPI + SQLite behind a reverse proxy. Stores invitations, RSVPs and uploaded photos,
-and serves the theme media in ./media. No external API calls at request time;
+FastAPI + SQLite behind a reverse proxy. Stores invitations, RSVPs and uploaded photos, and
+answers the link that is sent to guests (/i/<id>) with a page that carries the preview for
+messaging apps and sends people on to the invitation. No external API calls at request time;
 all invitation rendering happens in the browser.
 """
+import html
 import json
+import os
+import re
 import secrets
 import sqlite3
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -22,6 +27,15 @@ DB_PATH.parent.mkdir(exist_ok=True)
 
 MAX_INVITE_BYTES = 60_000
 MAX_RSVP_BYTES = 4_000
+
+# Where the invitation pages live, and what a link preview shows when an invitation names no picture.
+SITE_BASE = os.environ.get("FIRA_SITE_BASE", "https://hampus-gstack.github.io/fira").rstrip("/")
+SHARE_IMAGE_DEFAULT = "media/env-toscana.jpg"
+SHARE_IMAGE = re.compile(r"^media/[A-Za-z0-9][A-Za-z0-9_/-]*(?:\.[A-Za-z0-9_-]+)*\.(?:jpg|jpeg|png|webp)$")
+SHARE_WORDS = {
+    "en": {"title": "You're invited", "open": "Open the invitation", "gone": "This invitation does not exist (or was removed)."},
+    "sv": {"title": "Ni är inbjudna", "open": "Öppna inbjudan", "gone": "Den här inbjudan finns inte (eller har tagits bort)."},
+}
 
 ALLOWED_ORIGINS = [
     "https://hampus-gstack.github.io",
@@ -149,6 +163,58 @@ def create_invite(body: InviteIn, request: Request):
         )
         _bind_photos(conn, body.data)
     return {"id": invite_id, "admin_key": admin_key}
+
+
+def _share_html(lang: str, title: str, text: str, image: str, target: str, status: int = 200) -> HTMLResponse:
+    """A page for link previews. Everything that comes from an invitation is escaped."""
+    e = lambda s: html.escape(s, quote=True)
+    words = SHARE_WORDS.get(lang, SHARE_WORDS["en"])
+    page = f"""<!DOCTYPE html>
+<html lang="{e(lang)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{e(title)}</title>
+<meta name="robots" content="noindex">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{e(title)}">
+<meta property="og:description" content="{e(text)}">
+<meta property="og:image" content="{e(image)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0; url={e(target)}">
+<style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#FAF6EF;color:#1E2A23;font-family:Georgia,serif;text-align:center}}a{{color:#C25A3A}}</style>
+</head>
+<body><p><a href="{e(target)}">{e(words["open"])}</a></p>
+<script>location.replace({json.dumps(target).replace("<", "\\u003c")});</script>
+</body>
+</html>
+"""
+    return HTMLResponse(page, status_code=status, headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
+
+
+@app.get("/i/{invite_id}")
+def share_page(invite_id: str, request: Request, to: str = ""):
+    """The link that is sent to guests. Messaging apps take the preview from this page (the names,
+    the date, the envelope); people are sent on to the invitation itself. `?to=` travels along."""
+    rate_limit(request, "share", limit=120)
+    with db() as conn:
+        row = conn.execute("SELECT data FROM invites WHERE id=?", (invite_id,)).fetchone()
+    if not row:
+        words = SHARE_WORDS["en"]
+        return _share_html("en", words["title"], words["gone"], f"{SITE_BASE}/{SHARE_IMAGE_DEFAULT}", f"{SITE_BASE}/", status=404)
+    data = json.loads(row["data"])
+    share = data.get("share") if isinstance(data.get("share"), dict) else {}
+    text_of = lambda v: v.strip() if isinstance(v, str) else ""
+    lang = data.get("lang") if data.get("lang") in SHARE_WORDS else "en"
+    title = (text_of(share.get("title")) or text_of(data.get("title")) or SHARE_WORDS[lang]["title"])[:120]
+    text = (text_of(share.get("text")) or " · ".join(x for x in (text_of(data.get("dateText")), text_of(data.get("heroNote"))) if x))[:200]
+    image = text_of(share.get("image"))
+    if not SHARE_IMAGE.match(image) or ".." in image:
+        image = SHARE_IMAGE_DEFAULT
+    target = f"{SITE_BASE}/i.html?id={quote(invite_id, safe='')}"
+    if to.strip():
+        target += "&to=" + quote(to.strip()[:80], safe="")
+    return _share_html(lang, title, text, f"{SITE_BASE}/{image}", target)
 
 
 @app.get("/api/invites/{invite_id}")

@@ -9,7 +9,12 @@ Run from the repo root, in the FOREGROUND:
     python tests/opening.py agapi --engine webkit         # chromium (default), webkit or firefox
     python tests/opening.py agapi --desktop               # 1440x900 instead of 430x860
     python tests/opening.py agapi --query "id=<invite>"   # a published invitation instead of the theme's sample
+    python tests/opening.py agapi --file ../customers/x/invitation.json   # an invitation that is not published yet
+    python tests/opening.py agapi --story                 # every chapter of the story instead of the opening
     python tests/opening.py agapi --base prod
+
+--file shows an invitation from its file, on the local site only. Its pictures (keys ending in "File") are
+copied to site/_preview/, which git ignores, and removed again afterwards.
 
 Nothing is sent: it opens, watches and scrolls. Writes <out>/<theme>-<engine>-<view>[-handover].png
 (default out: ../.tmp/opening). A passing e2e run says nothing about how an opening looks: read the sheet.
@@ -31,6 +36,38 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from e2e import PROD, REPO, local_site  # noqa: E402
 
 FILM = "document.querySelector('.hero-film, .env4-film')"
+PREVIEW = REPO / "site" / "_preview"
+
+
+def from_file(path):
+    """The invitation in a file, with its local pictures made reachable for the local site."""
+    import json
+    path = Path(path).resolve()
+    data = json.loads(path.read_text())
+    shutil.rmtree(PREVIEW, ignore_errors=True)
+    PREVIEW.mkdir(parents=True)
+    count = [0]
+
+    def walk(node, top):
+        if isinstance(node, dict):
+            for key in list(node):
+                value = node[key]
+                if key.endswith("File") and isinstance(value, str):
+                    count[0] += 1
+                    name = f"{count[0]:02d}{Path(value).suffix}"
+                    shutil.copyfile(path.parent / value, PREVIEW / name)
+                    del node[key]
+                    stem = key[:-4]                       # photo, photo2
+                    target = (stem + "Url") if top else ("url" if "caption" in node or stem != "photo" else "imageUrl")
+                    node[target] = "_preview/" + name
+                else:
+                    walk(value, False)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, False)
+
+    walk(data, True)
+    return data
 
 
 def sheet(frames, out, columns, width):
@@ -51,6 +88,8 @@ def main():
     ap.add_argument("--desktop", action="store_true")
     ap.add_argument("--handover", action="store_true")
     ap.add_argument("--query", default="")
+    ap.add_argument("--file", default="")
+    ap.add_argument("--story", action="store_true")
     ap.add_argument("--base", default="local")
     ap.add_argument("--guest", default="Anna & Johan")
     ap.add_argument("--out", default=os.environ.get("FIRA_TMP", str(REPO.parent / ".tmp")) + "/opening")
@@ -60,7 +99,10 @@ def main():
     query = a.query or f"demo={a.theme}"
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    name = f"{a.theme}-{a.engine}-{view}" + ("-handover" if a.handover else "")
+    name = f"{a.theme}-{a.engine}-{view}" + ("-handover" if a.handover else "-story" if a.story else "")
+    data = from_file(a.file) if a.file else None
+    if data is not None and a.base != "local":
+        sys.exit("--file works on the local site only")
     frames = out / ("_" + name)
     shutil.rmtree(frames, ignore_errors=True)
     frames.mkdir(parents=True)
@@ -79,8 +121,41 @@ def main():
             page.screenshot(path=str(frames / f"{len(notes):02d}.png"))
             notes.append(note)
 
-        page.goto(f"{base}/i.html?{query}&to=" + quote(a.guest))
+        def show(envelope):
+            if data is None:
+                page.goto(f"{base}/i.html?{query}&to=" + quote(a.guest) + ("" if envelope else "&embed=1"))
+                return
+            page.goto(f"{base}/i.html?demo={a.theme}&embed=1")
+            page.wait_for_selector(".story .ch-hero")
+            page.evaluate("([d, guest, envelope]) => FiraInvite.render(d, document.getElementById('mount'), { guestName: guest, skipEnvelope: !envelope })",
+                          [data, a.guest, envelope])
+
+        if a.story:
+            show(False)
+            page.wait_for_selector(".story .ch-hero")
+            page.wait_for_timeout(4500)
+            shot("hero")
+            hold = page.evaluate("(() => { const h = document.querySelector('.ch-hero'); return Math.max(0, Math.round(h.getBoundingClientRect().height - innerHeight)); })()")
+            tops = page.evaluate("[...document.querySelectorAll('.ch')].slice(1).map(c => ({ top: Math.round(c.getBoundingClientRect().top + scrollY), height: Math.round(c.getBoundingClientRect().height), name: (c.dataset.ch || '') + (c.dataset.key ? ':' + c.dataset.key : '') }))")
+            for c in tops:
+                steps = max(1, math.ceil(c["height"] / (viewport["height"] * 0.8)))
+                for k in range(steps):
+                    page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", c["top"] + k * viewport["height"] * 0.8)
+                    page.wait_for_timeout(1300)
+                    shot(c["name"] + (f" ({k + 1}/{steps})" if steps > 1 else ""))
+            browser.close()
+            target = out / f"{name}.png"
+            sheet(frames, target, 4 if a.desktop else 8, 500 if a.desktop else 250)
+            for i, note in enumerate(notes):
+                print(f"{i:2d}  {note}")
+            print("errors:", errors[:5] if errors else "none")
+            print(f"sheet: {target}")
+            shutil.rmtree(PREVIEW, ignore_errors=True)
+            return
+
+        show(True)
         page.wait_for_selector(".env4-tap")
+        page.wait_for_function(f"!!({FILM} || {{}}).currentSrc", timeout=30000)
         page.wait_for_function(f"({FILM} || {{}}).readyState >= 3", timeout=60000)
         page.wait_for_timeout(2500)
         played = page.evaluate(f"{FILM}.currentSrc.split('/').pop()")
@@ -128,6 +203,7 @@ def main():
                     shot(f"picture {i + 1} at {int(part * 100)} %: " + page.evaluate(
                         "i => document.querySelectorAll('.venue-art')[i].className.replace('venue-art', '').replace('reveal', '').trim()", i))
         browser.close()
+    shutil.rmtree(PREVIEW, ignore_errors=True)
 
     target = out / f"{name}.png"
     columns = (5 if a.desktop else 10) if a.handover else (4 if a.desktop else 8)

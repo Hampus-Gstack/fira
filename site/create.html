@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/site.css?v=20260928c">
+<link rel="stylesheet" href="css/site.css?v=20260928d">
 <style>
   .ed-list-row select { padding: 9px 8px; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-family: var(--body); }
   .ed-list-row textarea { padding: 9px 11px; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; font-family: var(--body); resize: vertical; }
@@ -173,10 +173,10 @@
 
 <input id="photoFile" type="file" accept="image/*" hidden>
 
-<script src="js/config.js?v=20260928c"></script>
-<script src="js/api.js?v=20260928c"></script>
-<script src="js/i18n.js?v=20260928c"></script>
-<script src="js/templates.js?v=20260928c"></script>
+<script src="js/config.js?v=20260928d"></script>
+<script src="js/api.js?v=20260928d"></script>
+<script src="js/i18n.js?v=20260928d"></script>
+<script src="js/templates.js?v=20260928d"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -210,15 +210,20 @@
     d.collectEmail = $("f_collectEmail").checked;
     d.schedule = clean(st.schedule, "label").map((s) => ({ time: s.time, icon: s.icon, label: s.label, note: s.note }));
     const dcImgs = st.dcImages.filter((i) => i.photoId || i.url).map((i) => ({ photoId: i.photoId, url: i.url, caption: i.caption }));
-    const dc = { title: val("dcTitle"), text: val("dcText"), palette: parsePalette(val("dcPalette")), images: dcImgs };
+    // Fields this editor has no input for (a lead, a heading for the colours) stay as they were.
+    const dc = Object.assign({}, base.dressCode, { title: val("dcTitle"), text: val("dcText"), palette: parsePalette(val("dcPalette")), images: dcImgs });
     d.dressCode = (dc.text || dc.palette.length || dcImgs.length) ? dc : undefined;
     const gl = clean(st.giftLinks, "url");
-    d.gifts = (val("giftText") || gl.length) ? { text: val("giftText"), links: gl, details: val("giftDetails") } : undefined;
+    d.gifts = (val("giftText") || gl.length) ? Object.assign({}, base.gifts, { text: val("giftText"), links: gl, details: val("giftDetails") }) : undefined;
     d.menu = clean(st.menu, "name");
     d.accommodation = clean(st.acc, "name").map((a) => Object.assign({}, a));
     d.faq = clean(st.faq, "q");
-    const c = { text: val("contactText"), name: val("contactName"), phone: val("contactPhone"), giftText: val("contactGift") };
+    const c = Object.assign({}, base.contact, { text: val("contactText"), name: val("contactName"), phone: val("contactPhone"), giftText: val("contactGift") });
     d.contact = (c.text || c.name || c.phone || c.giftText) ? c : undefined;
+    // What a link preview shows: the sealed envelope of the theme.
+    const opening = (FIRA_TEMPLATES[currentTpl] || {}).opening || {};
+    if (opening.poster) d.share = Object.assign({}, base.share, { image: opening.poster });
+    else if (d.share) { d.share = Object.assign({}, d.share); delete d.share.image; }
     d.questions = clean(st.questions, "label").map((q) => {
       const opts = (q.optionsRaw || "").split(",").map((s) => s.trim()).filter(Boolean);
       const each = q.type === "each" && opts.length > 0;
@@ -262,9 +267,9 @@
     const doc = frame.contentDocument;
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-      <link rel="stylesheet" href="css/invite.css?v=20260928c"><style>body{margin:0}<\/style></head><body><div id="m"></div>
-      <script src="js/config.js?v=20260928c"><\/script><script src="js/api.js?v=20260928c"><\/script>
-      <script src="js/i18n.js?v=20260928c"><\/script><script src="js/templates.js?v=20260928c"><\/script><script src="js/scrollfilm.js?v=20260928c"><\/script><script src="js/invite-core.js?v=20260928c"><\/script>
+      <link rel="stylesheet" href="css/invite.css?v=20260928d"><style>body{margin:0}<\/style></head><body><div id="m"></div>
+      <script src="js/config.js?v=20260928d"><\/script><script src="js/api.js?v=20260928d"><\/script>
+      <script src="js/i18n.js?v=20260928d"><\/script><script src="js/templates.js?v=20260928d"><\/script><script src="js/scrollfilm.js?v=20260928d"><\/script><script src="js/invite-core.js?v=20260928d"><\/script>
       <script>window.addEventListener("message",function(e){
         if(!e.data||e.data.type!=="fira-preview")return;
         FiraInvite.render(e.data.data, document.getElementById("m"), {skipEnvelope:!e.data.envelope, noRsvp:false, inviteId:null, noFullscreen:true});
@@ -429,9 +434,9 @@
         editing = { id: res.id, admin_key: res.admin_key };
         FiraVault.save({ id: res.id, admin_key: res.admin_key, title: data.title, template: data.template, date: data.date });
         const baseUrl = location.href.replace(/create\.html.*$/, "");
-        const share = baseUrl + "i.html?id=" + res.id;
+        const share = (FIRA_CONFIG.SHARE_BASE || (baseUrl + "i.html?id=")) + res.id;
         const manage = baseUrl + "manage.html?id=" + res.id + "&key=" + res.admin_key;
-        $("shareUrl").value = share; $("manageUrl").value = manage; $("viewLive").href = share;
+        $("shareUrl").value = share; $("manageUrl").value = manage; $("viewLive").href = "i.html?id=" + encodeURIComponent(res.id);
         $("goDash").onclick = () => (location.href = manage);
         $("shareModal").hidden = false;
         $("edHeading").textContent = "Editing: " + data.title;

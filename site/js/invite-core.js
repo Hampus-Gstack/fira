@@ -458,6 +458,7 @@
       return `
       <section class="ch ch-photo" data-ch="photo">
         <figure class="ph-frame ${theme.photoFrame ? "pf-" + theme.photoFrame : ""} reveal"><img src="${esc(src)}" alt=""></figure>
+        ${data.photoTitle ? `<p class="ph-title reveal">${esc(data.photoTitle)}</p>` : ""}
         ${data.photoCaption ? `<p class="ph-caption reveal">${esc(data.photoCaption)}</p>` : ""}
       </section>`;
     },
@@ -588,7 +589,9 @@
           ${h2(dc.title || word("dressCode"))}
           ${dc.lead ? `<p class="sec-lead reveal">${esc(dc.lead)}</p>` : ""}
           ${dc.text ? paragraphs(dc.text, "inv-p") : ""}
-          ${palette}${images}
+          ${images}
+          ${palette && dc.paletteTitle ? `<p class="dc-title reveal">${esc(dc.paletteTitle)}</p>` : ""}
+          ${palette}
         </div>
       </section>`;
     },
@@ -710,13 +713,29 @@
       const list = data.sections || [];
       const s = list.find((x) => x.key === arg) || list[parseInt(arg, 10)];
       if (!s) return "";
-      const blocks = (s.blocks || []).map((b) => `
+      // A card: a small picture, a name, a line of text. With `url` the whole card is a link.
+      const card = (c) => {
+        const src = photoSrc(c.photoId || c.imageUrl);
+        const url = safeUrl(c.url);
+        const inner = `${src ? `<figure class="sc-art"><img src="${esc(src)}" alt="" loading="lazy"></figure>` : ""}
+          ${c.title ? `<b class="sc-title">${esc(c.title)}</b>` : ""}
+          ${c.text ? `<small class="sc-text">${esc(c.text)}</small>` : ""}
+          ${url && c.link ? `<span class="sc-link">${esc(c.link)}</span>` : ""}`;
+        return url
+          ? `<a class="sec-card reveal" href="${esc(url)}"${/^https?:/i.test(url) ? ' target="_blank" rel="noopener"' : ""}>${inner}</a>`
+          : `<div class="sec-card reveal">${inner}</div>`;
+      };
+      const blocks = (s.blocks || []).map((b) => {
+        const cards = (b.cards || []).filter((c) => c && (c.title || c.photoId || c.imageUrl));
+        return `
         <div class="sec-block ${b.style ? "sb-" + esc(b.style) : ""}">
           ${b.heading ? `<h3 class="sec-h3 reveal">${esc(b.heading)}</h3>` : ""}
           ${b.text ? paragraphs(b.text, "inv-p") : ""}
           ${(b.lines || []).length ? `<ul class="sec-lines">${b.lines.map((l) => `<li class="reveal">${esc(l)}</li>`).join("")}</ul>` : ""}
+          ${cards.length ? `<div class="sec-cards n${Math.min(cards.length, 4)}">${cards.map(card).join("")}</div>` : ""}
           ${(b.buttons || []).length ? `<div class="inv-cta reveal">${b.buttons.map((x) => button(x.url, x.label, x.sub)).join("")}</div>` : ""}
-        </div>`).join("");
+        </div>`;
+      }).join("");
       const key = String(s.key || arg || "").replace(/[^a-z0-9-]/gi, "");
       const art = theme.art && theme.art.section ? theme.art.section(s) : "";
       return `
@@ -809,6 +828,7 @@
           if (frame) frame.remove();
         });
         card.classList.add("is-open");
+        soundState.hush();
         const frame = document.createElement("iframe");
         frame.className = "music-frame";
         frame.title = card.querySelector(".music-meta b").textContent;
@@ -919,20 +939,61 @@
     ? `${T("for")} ${esc(opts.guestName)}`
     : esc(data.envelopeTeaser || word("teaser")));
 
-  // Sound of the opening film (and of anything else that registers itself).
+  // Sound: the opening film, and the music of the invitation (`backgroundMusic`, else the theme's
+  // `music`). Browsers allow sound only from inside a tap, so the music starts with the tap that opens
+  // the envelope, or with the first tap on the sound button, and loops from there on.
   const soundState = {
-    on: false, media: [], btn: null,
-    set(v) { this.on = v; this.media.forEach((m) => (m.muted = !v)); if (this.btn) this.btn.classList.toggle("on", v); },
+    on: false, media: [], song: null, started: false, btn: null,
+    set(v) {
+      this.on = v;
+      this.media.forEach((m) => (m.muted = !v));
+      if (this.song) {
+        this.song.muted = !v;
+        if (v && this.started && this.song.paused) { const p = this.song.play(); if (p && p.catch) p.catch(() => {}); }
+      }
+      if (this.btn) this.btn.classList.toggle("on", v);
+    },
     bind(m) { this.media.push(m); },
-    reset() { this.on = false; this.media = []; this.btn = null; },
+    music(stage, src) {
+      const song = document.createElement("audio");
+      song.className = "inv-song";
+      song.preload = "none";
+      song.loop = true;
+      song.volume = 0.85;          // phones ignore this: the level is set in the file
+      song.src = src;
+      stage.appendChild(song);
+      this.song = song;
+    },
+    start(muted) {                 // call from inside a tap
+      if (!this.song || this.started) return;
+      this.started = true;
+      this.song.muted = !!muted;
+      const p = this.song.play();
+      if (p && p.catch) p.catch(() => { this.started = false; });
+    },
+    hush() { if (this.song && !this.song.paused) this.song.pause(); },   // something else is playing
+    reset() {
+      if (this.song) { this.song.pause(); this.song.removeAttribute("src"); }
+      this.on = false; this.media = []; this.song = null; this.started = false; this.btn = null;
+    },
   };
+  document.addEventListener("visibilitychange", () => {   // no music from a page nobody is looking at
+    const song = soundState.song;
+    if (!song || !soundState.started) return;
+    if (document.hidden) song.pause();
+    else if (soundState.on) { const p = song.play(); if (p && p.catch) p.catch(() => {}); }
+  });
   function soundToggle(stage) {
     const b = document.createElement("button");
     b.className = "snd-toggle" + (soundState.on ? " on" : "");
     b.setAttribute("aria-label", word("toggleSound"));
     b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M11 5L6 9H3v6h3l5 4V5z"/><path class="w1" d="M15.5 8.5a5 5 0 010 7"/><path class="w2" d="M18.5 5.5a9 9 0 010 13"/><path class="x" d="M16 9l5 6M21 9l-5 6"/></svg>`;
-    b.addEventListener("click", () => soundState.set(!soundState.on));
+    b.addEventListener("click", () => {
+      const on = !soundState.on;
+      if (on) soundState.start(false);     // the first sound of a page that opened without a tap
+      soundState.set(on);
+    });
     soundState.btn = b;
     stage.appendChild(b);
   }
@@ -955,6 +1016,8 @@
     film.addEventListener("ended", done);
     film.addEventListener("error", done);
     film.muted = !!opts.startMuted;
+    if (soundState.song) film.volume = 0.7;      // the film's own sound sits under the music
+    soundState.start(film.muted);
     soundState.set(!film.muted);
     const p = film.play();
     if (p && p.catch) p.catch(() => { film.muted = true; soundState.set(false); film.play().catch(done); });
@@ -991,6 +1054,7 @@
     const open = () => {
       if (opened) return;
       opened = true;
+      soundState.start(!!opts.startMuted);
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
       if (!opts.noFullscreen) tryFullscreen();
       env.classList.add("opening");
@@ -1105,12 +1169,13 @@
       film.classList.add("done");
       env.remove();
       if (unseal) unseal();
-      if (soundState.btn) soundState.btn.remove();   // the film was the only thing with sound
+      if (soundState.btn && !soundState.song) soundState.btn.remove();   // the film was the only thing with sound
       setTimeout(() => film.remove(), 900);
       onSettled();
     };
-    function open() {
+    function open(e) {
       if (opened) return;
+      if (e && e.isTrusted !== false) soundState.start(!!opts.startMuted);   // sound is allowed from inside a tap only
       if (!film.getAttribute("src")) { wanted = true; return; }   // it opens as soon as the film is chosen
       opened = true;
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
@@ -1155,6 +1220,7 @@
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
       if (!opts.noFullscreen) tryFullscreen();
       env.classList.add("sealing");
+      if (soundState.song) { soundState.start(!!opts.startMuted); soundState.set(!opts.startMuted); }
       setTimeout(() => env.classList.add("cracked"), 260);
       setTimeout(() => env.classList.add("unfolding"), 760);
       setTimeout(() => { env.classList.add("lifting"); onOpen(); }, 1500);
@@ -1167,15 +1233,15 @@
 
   // ======================================================================
   // render(data, mount, opts)
-  // opts: { inviteId, skipEnvelope, noRsvp, guestName, noFullscreen, noFilm, startMuted }
+  // opts: { inviteId, skipEnvelope, noRsvp, guestName, noFullscreen, noFilm, noMusic, startMuted }
   // ======================================================================
   function render(data, mount, opts = {}) {
     const theme = window.FIRA_TEMPLATES[data.template] || window.FIRA_TEMPLATES.botanical;
     buildLabels(data, theme);
     if (unseal) unseal();
+    soundState.reset();
     mount.innerHTML = "";
     document.querySelectorAll(".cta-pill, .fs-toggle, .snd-toggle, .celebrate-canvas").forEach((el) => el.remove());
-    soundState.reset();
     mount.className = "inv-root theme-" + theme.id;
     document.documentElement.lang = LBL._lang;
     if (theme.fonts && !document.getElementById("f-" + theme.id)) {
@@ -1190,6 +1256,8 @@
     const stage = document.createElement("div");
     stage.className = "inv-stage";
     mount.appendChild(stage);
+    const song = data.backgroundMusic === false || opts.noMusic ? "" : safeUrl(data.backgroundMusic || theme.music || "");
+    if (song) soundState.music(stage, song);
 
     const o = theme.opening || {};
     const film = !!(o.video && !opts.noFilm) && !opts.skipEnvelope && !REDUCED;
@@ -1251,7 +1319,11 @@
       }
     };
 
-    if (opts.skipEnvelope || REDUCED) { showStory(false); return; }
+    if (opts.skipEnvelope || REDUCED) {
+      showStory(false);
+      if (soundState.song) soundToggle(stage);
+      return;
+    }
     if (lands) {
       const chrome = showStory(true);
       landingOpening(stage, data, theme, opts, chrome);
@@ -1261,6 +1333,7 @@
       soundToggle(stage);
     } else {
       envelope(stage, data, theme, opts, () => showStory(false));
+      if (soundState.song) soundToggle(stage);
     }
   }
 

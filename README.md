@@ -15,7 +15,7 @@ Animated digital invitations. A guest gets a link, sees a sealed envelope addres
 | `site/js/scrollfilm.js` | A film cut into frames, drawn on a canvas at the position the page asks for. Frames load coarse to fine. Used by the invitation and by the landing page. |
 | `site/js/landing.js` | The landing page: the envelope film follows the scroll, then the live invitation inside the phone. |
 | `site/media/seq/<name>/` | A film as WebP frames with a `manifest.json` (frame count, brightness of each frame). |
-| `server/` | The API: FastAPI + SQLite. Invitations, RSVPs, uploaded photos, theme media. |
+| `server/` | The API: FastAPI + SQLite. Invitations, RSVPs, uploaded photos, and the guest link with its preview. |
 | `tests/` | End-to-end suite and review-sheet generator (Playwright). |
 
 Pages: `index.html` (landing), `create.html` (editor with live preview), `i.html` (the invitation), `manage.html` (host dashboard).
@@ -23,7 +23,7 @@ Pages: `index.html` (landing), `create.html` (editor with live preview), `i.html
 ## How an invitation works
 
 1. The host builds it in the editor and publishes. The API stores one JSON document and returns an id and a host key.
-2. The guest link is `i.html?id=<id>`. Adding `&to=<name>` addresses the envelope to that guest and prefills their RSVP.
+2. The guest link is `<API host>/i/<id>`: a small page of the API that carries the preview for messaging apps (the title, the date, the envelope of the theme) and sends people on to `i.html?id=<id>`. Adding `?to=<name>` addresses the envelope to that guest and prefills their RSVP.
 3. The host link is `manage.html?id=<id>&key=<host key>`. The key is the only credential: it shows the guest list and allows editing.
 
 ## Run locally
@@ -69,6 +69,9 @@ the scroll. Further down, a picture made with `figure(src, { film })` paints its
 | `lands` | The second from which the names may arrive. Without it the film plays over the page and fades |
 | `hero`, `heroVideo` | The picture the film lands on, and a loop of it |
 | `heroSeq`, `pin` | A folder of frames (`media/seq/<name>/`) and for how many screens of scroll the hero is held |
+
+A theme with `music` (a file in `media/`) plays it from the tap that opens the envelope, looping, with a sound
+button; `backgroundMusic: false` in an invitation turns it off, a path there replaces it.
 
 On screens wider than they are high the hero is a portrait card. With reduced motion there is no envelope
 and nothing follows the scroll: the page is a still page.

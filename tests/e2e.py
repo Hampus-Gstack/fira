@@ -38,6 +38,7 @@ SITE = REPO / "site"
 PROD = os.environ.get("FIRA_SITE_BASE", "https://hampus-gstack.github.io/fira").rstrip("/")
 API = os.environ.get("FIRA_API_BASE", "https://fira.cursuscapital.co/api").rstrip("/")
 API_ORIGIN = API.rsplit("/api", 1)[0]
+SHARE = API_ORIGIN + "/i/"   # the link that is sent to guests
 PORT = 8090  # http://127.0.0.1:8090 is on the API's CORS allow-list
 GROUPS = ("pages", "landing", "film", "scroll", "seal", "lang", "flow")
 
@@ -83,6 +84,24 @@ def api(method, path, admin_key=None):
         return e.code, None
     except Exception as e:  # never echo the request
         raise Check(f"API {method} failed: {type(e).__name__}")
+
+
+def fetch(url):
+    """Status and text of a page, fetched outside the browser (as a messaging app does for its preview)."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "fira-e2e"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:
+        raise Check(f"could not fetch the page: {type(e).__name__}")
+
+
+def preview(page_text, name):
+    import html, re
+    m = re.search(r'<meta property="og:' + name + r'" content="([^"]*)"', page_text)
+    return html.unescape(m.group(1)) if m else None
 
 
 def served_as_image(url):
@@ -172,6 +191,7 @@ class Suite:
                      heroVideo: !!(t.opening && t.opening.heroVideo),
                      lands: (t.opening && t.opening.lands) || 0,
                      heroSeq: !!(t.opening && t.opening.heroSeq),
+                     music: !!t.music,
                      sample: !!FIRA_SAMPLES[t.id] }))"""
             )
             page.close()
@@ -383,7 +403,24 @@ class Suite:
                     """({ locked: document.documentElement.classList.contains('sealed'), toggle: !!document.querySelector('.snd-toggle'),
                           words: getComputedStyle(document.querySelector('.ch-hero .ch-inner')).visibility })"""
                 )
-                expect(not after["locked"] and not after["toggle"] and after["words"] == "visible", f"{t['id']}: the page is not open after the film: {after}")
+                expect(not after["locked"] and after["words"] == "visible", f"{t['id']}: the page is not open after the film: {after}")
+                expect(after["toggle"] == t["music"], f"{t['id']}: the sound button should {'stay, there is music' if t['music'] else 'leave with the film'}")
+            if t["music"]:
+                song = """(() => { const a = document.querySelector('audio.inv-song');
+                            return a ? { t: a.currentTime, paused: a.paused, muted: a.muted, loop: a.loop, error: a.error && a.error.code,
+                                         on: document.querySelector('.snd-toggle').classList.contains('on') } : null; })()"""
+                try:
+                    page.wait_for_function("(document.querySelector('audio.inv-song') || {}).currentTime > 0.3", timeout=20000)
+                except Exception:
+                    raise Check(f"{t['id']}: the music did not start with the tap: {page.evaluate(song)}")
+                s = page.evaluate(song)
+                expect(not s["paused"] and not s["muted"] and s["loop"] and s["on"], f"{t['id']}: the music is not playing aloud: {s}")
+                page.click(".snd-toggle")
+                s = page.evaluate(song)
+                expect(s["muted"] and not s["on"], f"{t['id']}: the sound button did not silence the music: {s}")
+                page.click(".snd-toggle")
+                s = page.evaluate(song)
+                expect(not s["muted"] and not s["paused"] and s["on"], f"{t['id']}: the sound button did not bring the music back: {s}")
             if t["heroVideo"]:
                 try:
                     page.wait_for_function("(document.querySelector('.hero-video') || {}).currentTime > 0.5", timeout=20000)
@@ -401,6 +438,23 @@ class Suite:
             page.wait_for_selector(".cta-pill.show", timeout=8000)
             page.close()
             self.no_errors(f"film {t['id']}")
+        for t in [t for t in self.themes() if t["music"]]:
+            # opened without an envelope (a preview): silent until the guest asks for sound
+            page = self.page()
+            page.goto(self.url(f"i.html?demo={t['id']}&embed=1"))
+            page.wait_for_selector(".story .ch-hero")
+            quiet = page.evaluate("(() => { const a = document.querySelector('audio.inv-song'); return { there: !!a, paused: a && a.paused, button: !!document.querySelector('.snd-toggle') }; })()")
+            expect(quiet["there"] and quiet["paused"] and quiet["button"], f"{t['id']}: without an envelope the music should wait for the sound button: {quiet}")
+            page.click(".snd-toggle")
+            page.wait_for_function("(document.querySelector('audio.inv-song') || {}).currentTime > 0.2", timeout=20000)
+            # an invitation may turn the music off
+            off = page.evaluate(
+                """(theme) => { const d = JSON.parse(JSON.stringify(FIRA_SAMPLES[theme])); d.backgroundMusic = false;
+                     FiraInvite.render(d, document.getElementById('mount'), { skipEnvelope: true });
+                     return { songs: document.querySelectorAll('audio.inv-song').length, button: !!document.querySelector('.snd-toggle') }; }""", t["id"])
+            expect(off["songs"] == 0 and not off["button"], f"{t['id']}: `backgroundMusic: false` did not turn the music off: {off}")
+            page.close()
+            self.no_errors(f"music {t['id']}")
         landing = [t for t in films if t["lands"]]
         if landing:
             theme = landing[0]["id"]
@@ -430,7 +484,8 @@ class Suite:
                    f"{theme}: drawn again while sealed, the page stays locked: {state}")
             self.no_errors(f"film {theme} (light film, drawn again)")
         note = f" (hero video still buffering on this connection: {', '.join(slow)})" if slow else ""
-        return ", ".join(t["id"] + ("*" if t["lands"] else "") for t in films) + " (* lands on the hero); light film on a slow connection" + note
+        with_music = ", ".join(t["id"] for t in self.themes() if t["music"]) or "none"
+        return ", ".join(t["id"] + ("*" if t["lands"] else "") for t in films) + f" (* lands on the hero); music: {with_music}; light film on a slow connection" + note
 
     def test_scroll(self):
         """Pictures that follow the scroll inside the story: the held hero and the paintings."""
@@ -542,11 +597,44 @@ class Suite:
         expect(not page.is_visible(".rf-perguest"), "meal choice is still shown to a guest who declines")
         page.click(".rf-attend label:has(input[value='yes'])")
 
+        # pictures beside the text: cards in a section, the dress code with its colours, the photo with its names
+        cards = page.locator(".sec-stay .sec-card, .ch-section .sec-card").count()
+        expect(page.locator(".ch-dresscode .dc-img img").count() == 1, "the dress code has no picture")
+        expect(page.locator(".ch-dresscode .dc-swatch").count() >= 4, "the dress code has no colours")
+        expect("INSPIRERAS" in page.inner_text(".ch-dresscode .dc-title").upper(), "the colours of the dress code have no heading")
+        expect(page.locator(".ch-photo .ph-title").count() == 1, "the photo has no names under it")
+        expect(page.locator(".ch-music").count() == 0, "the list of songs is back in the Greek sample")
+
+        # a list of songs and cards with pictures, on an invitation drawn for this test
+        page.evaluate(
+            """() => { const d = JSON.parse(JSON.stringify(FIRA_SAMPLES.agapi));
+                 d.chapters = ["hero", "section:stay", "music", "rsvp"];
+                 d.music = [{ title: "One", artist: "A", spotify: "https://open.spotify.com/track/3F42efYjs67eHIFhgz2r6S" },
+                            { title: "Two", artist: "B", spotify: "https://open.spotify.com/track/1Y5nb9F1LvIA6j90oqjDsa" }];
+                 d.sections = [{ key: "stay", title: "Boende", blocks: [{ text: "Hotell", cards: [
+                     { imageUrl: "media/dinner-agapi.jpg", title: "Hotel One", text: "In town", url: "https://example.com/one", link: "Till hotellet" },
+                     { imageUrl: "javascript:alert(1)", title: "Hotel <Two>", text: "Out of town", url: "javascript:alert(2)", link: "No" },
+                     { title: "", text: "nothing to show" } ] }] }];
+                 FiraInvite.render(d, document.getElementById("mount"), { skipEnvelope: true }); }"""
+        )
+        page.wait_for_selector(".story .sec-stay .sec-card")
+        found = page.evaluate(
+            """() => [...document.querySelectorAll('.sec-stay .sec-card')].map(c => ({ tag: c.tagName, href: c.getAttribute('href'),
+                 img: (c.querySelector('img') || {}).src || null, title: c.querySelector('.sc-title').textContent,
+                 link: (c.querySelector('.sc-link') || {}).textContent || null }))"""
+        )
+        expect(len(found) == 2, f"expected two cards (one has nothing to show), found {len(found)}")
+        expect(found[0]["tag"] == "A" and found[0]["href"] == "https://example.com/one" and found[0]["link"] == "Till hotellet"
+               and found[0]["img"].endswith("media/dinner-agapi.jpg"), f"the first card is wrong: {found[0]}")
+        expect(found[1]["tag"] == "DIV" and found[1]["href"] is None and found[1]["img"] is None and found[1]["link"] is None
+               and found[1]["title"] == "Hotel <Two>", f"a card with unsafe links was not made harmless: {found[1]}")
         page.locator(".music-card >> nth=0").scroll_into_view_if_needed()
         page.click(".music-card >> nth=0 >> .music-play")
         page.wait_for_selector(".music-card.is-open iframe[src*='open.spotify.com/embed/track/']", timeout=15000)
         page.click(".music-card >> nth=1 >> .music-play")
         page.wait_for_function("document.querySelectorAll('.music-card iframe').length === 1", timeout=15000)
+        page.goto(self.url("i.html?demo=agapi&embed=1"))
+        page.wait_for_selector(".story .ch-hero")
 
         safe = page.evaluate("""[FiraInvite.safeUrl('javascript:alert(1)'), FiraInvite.safeUrl(' JaVaScRiPt:alert(1)'),
                                  FiraInvite.safeUrl('data:text/html,x'), FiraInvite.safeUrl('https://example.com/a'),
@@ -554,7 +642,7 @@ class Suite:
         expect(safe == ["", "", "", "https://example.com/a", "tel:+46701740605", "media/x.jpg"], f"link filter is wrong: {safe}")
         page.close()
         self.no_errors("lang")
-        return "Swedish words and dates, time zone, per-guest choices, music, link filter"
+        return "Swedish words and dates, time zone, per-guest choices, cards, dress code, songs, link filter"
 
     def test_invite(self):
         """A published invitation, read only: nothing is sent, so a customer's guest list stays clean."""
@@ -562,6 +650,12 @@ class Suite:
         status, doc = api("GET", f"/invites/{invite_id}")
         expect(status == 200, f"invitation {invite_id} is not readable (HTTP {status})")
         data = doc["data"]
+        status, text = fetch(SHARE + invite_id)
+        expect(status == 200, f"the guest link answers HTTP {status}")
+        expect(preview(text, "title") == (data.get("share") or {}).get("title", data.get("title")), f"the preview has the title {preview(text, 'title')!r}")
+        image = preview(text, "image") or ""
+        expect(image.startswith(PROD + "/media/") and served_as_image(image), f"the preview picture is not served: {image!r}")
+        expect(f'url={PROD}/i.html?id={invite_id}"' in text, "the guest link does not send people on to the invitation")
         page = self.page()
         page.goto(self.url(f"i.html?id={invite_id}&to=" + urllib.parse.quote("Anna & Johan")))
         page.wait_for_selector(".env4-tap, .env3-seal")
@@ -590,7 +684,7 @@ class Suite:
         expect(not bad, f"unexpected link targets: {bad[:3]}")
         page.close()
         self.no_errors("invite")
-        return f"{invite_id}: {data.get('title')} · {data.get('template')} · {chapters} chapters, {len(links)} links, nothing sent"
+        return f"{invite_id}: {data.get('title')} · {data.get('template')} · {chapters} chapters, {len(links)} links, link preview, nothing sent"
 
     def test_flow(self):
         title = "E2E " + time.strftime("%m%d-%H%M%S")
@@ -629,7 +723,7 @@ class Suite:
         invite_id, key = query["id"][0], query["key"][0]
         record = [invite_id, key, False]
         self.created.append(record)
-        expect(share.startswith(self.base + "/i.html?id=" + invite_id), "guest link has an unexpected shape")
+        expect(share == SHARE + invite_id, f"guest link has an unexpected shape: {share.replace(invite_id, '<id>')}")
         host.close()
 
         status, doc = api("GET", f"/invites/{invite_id}")
@@ -641,9 +735,19 @@ class Suite:
         for name, pid in ids.items():
             expect(api("GET", f"/photos/{pid}")[0] == 200, f"{name} photo is not served")
 
+        # -- the link as a messaging app sees it: the title, the envelope of the theme, and the way on
+        status, text = fetch(share + "?to=" + urllib.parse.quote(guest_name))
+        expect(status == 200, f"the guest link answers HTTP {status}")
+        expect(preview(text, "title") == title, f"the preview has the title {preview(text, 'title')!r}")
+        image = preview(text, "image") or ""
+        expect(image == PROD + "/media/env-toscana.jpg" and served_as_image(image), f"the preview picture is {image!r}")
+        onward = PROD + "/i.html?id=" + invite_id + "&to=" + urllib.parse.quote(guest_name, safe="")
+        expect(f'url={onward.replace("&", "&amp;")}"' in text, "the guest link does not send people on to the invitation with their name")
+        expect(fetch(SHARE + "no-such-invitation")[0] == 404, "an unknown guest link should answer 404")
+
         # -- guest: open, read, answer
         guest = self.page()
-        guest.goto(share + "&to=" + urllib.parse.quote(guest_name))
+        guest.goto(self.url(f"i.html?id={invite_id}&to=" + urllib.parse.quote(guest_name)))   # where the guest link sends people
         guest.wait_for_selector(".env4-tap")
         expect(guest_name in guest.inner_text(".env4-addr"), "envelope is not addressed to the guest")
         self.open_envelope(guest, film=True)
@@ -691,7 +795,7 @@ class Suite:
         host.click("#plGen")
         links = host.locator("#plOut input")
         expect(links.count() == 2, f"expected 2 personal links, got {links.count()}")
-        expect("&to=" + urllib.parse.quote("Anna & Johan", safe="") in links.first.input_value(), "personal link does not carry the name")
+        expect(links.first.input_value() == SHARE + invite_id + "?to=" + urllib.parse.quote("Anna & Johan", safe=""), "personal link has an unexpected shape")
         host.click("text=Edit invitation")
         host.wait_for_function("t => document.getElementById('f_title') && document.getElementById('f_title').value === t", arg=title)
         host.fill("#f_subtitle", "edited by the suite")
@@ -714,7 +818,7 @@ class Suite:
         for name in ("main", "attire"):
             expect(api("GET", f"/photos/{ids[name]}")[0] == 404, f"{name} photo survived the delete")
         self.no_errors("flow")
-        return f"invitation {invite_id}: publish, 3 photos, RSVP, dashboard, links, edit, delete"
+        return f"invitation {invite_id}: publish, 3 photos, link preview, RSVP, dashboard, links, edit, delete"
 
     def cleanup(self):
         for record in self.created:
