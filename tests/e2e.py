@@ -597,9 +597,52 @@ class Suite:
             seen.append(f"{t['id']} (hero{' and ' + str(figures) + ' pictures' if figures else ''})" if t["heroSeq"] else f"{t['id']} ({figures} pictures)")
             page.close()
             self.no_errors(f"scroll {t['id']}")
+        flying = self.check_flights()
         expect(seen, "no theme has a picture that follows the scroll")
+        if flying:
+            seen.append("doves cross " + flying)
         note = f" (shown as stills on this connection, their frames came too late: {', '.join(stills)})" if stills else ""
         return ", ".join(seen) + note
+
+    def check_flights(self):
+        """Doves that cross chapters (theme.flights): they wait until the guest arrives, then fly, and
+        a guest who asked for less motion gets none."""
+        page = self.page()
+        page.goto(self.url("index.html"))
+        page.wait_for_function("window.FIRA_TEMPLATES && window.FIRA_SAMPLES")
+        themes = page.evaluate("Object.values(FIRA_TEMPLATES).filter(t => t.flights && FIRA_SAMPLES[t.id]).map(t => ({ id: t.id, chapters: t.flights.chapters.length }))")
+        page.close()
+        told = []
+        for t in themes:
+            page = self.page()
+            page.goto(self.url(f"i.html?demo={t['id']}&embed=1"))
+            page.wait_for_selector(".story .ch-hero")
+            layers = page.locator(".flight").count()
+            expect(0 < layers <= t["chapters"], f"{t['id']}: {layers} flights drawn for {t['chapters']} chapters")
+            expect(page.locator(".flight.fly").count() == 0, f"{t['id']}: doves fly before the guest has come to them")
+            top = page.evaluate("Math.round(document.querySelector('.flight').parentElement.getBoundingClientRect().top + scrollY)")
+            for y in range(0, top, 500):
+                page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", y)
+                page.wait_for_timeout(40)
+            page.evaluate("y => scrollTo({top: y, behavior: 'instant'})", max(0, top - 100))
+            page.wait_for_function("document.querySelector('.flight').classList.contains('fly')", timeout=15000)
+            page.wait_for_function(
+                """() => new Promise((done) => { const d = document.querySelector('.flight .dove'), s = getComputedStyle(d);
+                     if (!/url\(/.test(s.backgroundImage)) return done(false);
+                     const x = d.getBoundingClientRect().left, at = s.backgroundPositionX;
+                     setTimeout(() => done(Math.abs(d.getBoundingClientRect().left - x) > 8 && getComputedStyle(d).backgroundPositionX !== at), 700); })""",
+                timeout=20000)
+            wide = page.evaluate("document.documentElement.scrollWidth > innerWidth + 1")
+            expect(not wide, f"{t['id']}: the doves make the page scroll sideways")
+            page.close()
+            calm = self.browser.new_context(viewport={"width": 430, "height": 860}, reduced_motion="reduce").new_page()
+            calm.goto(self.url(f"i.html?demo={t['id']}&embed=1"), wait_until="domcontentloaded", timeout=int(45000 * PATIENCE))
+            calm.wait_for_selector(".story .ch-hero")
+            expect(calm.locator(".flight").count() == 0, f"{t['id']}: doves are drawn for a guest who asked for less motion")
+            calm.context.close()
+            told.append(f"{t['id']} ({layers} chapters)")
+            self.no_errors(f"flights {t['id']}")
+        return ", ".join(told)
 
     def test_seal(self):
         coded = [t for t in self.themes() if not t["film"]]

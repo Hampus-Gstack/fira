@@ -790,6 +790,46 @@ html.sealed .env4 { touch-action: none; }
     linear-gradient(to right, transparent 0, #000 9%, #000 91%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 6%, #000 86%, transparent 100%);
   -webkit-mask-composite: source-in; mask-composite: intersect;
 }
+/* Doves that cross a chapter (theme.flights). A dove is a sheet of twenty pictures of one wing beat and a
+   half, ten to a row: the sheet steps on while the dove is carried across. Themes set the sheets, on
+   `.near`, and may set --size, --top, --time and --wait for each dove. */
+.flight { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.dove {
+  position: absolute; left: 0; top: var(--top, 26px); width: var(--size, 78px); aspect-ratio: 1;
+  background-repeat: no-repeat; background-size: 1000% 200%;
+  translate: -24vw 0; opacity: 0;
+  filter: drop-shadow(0 5px 9px rgba(31, 53, 89, 0.24));
+}
+.flight.fly .dove {
+  animation: dove-cross var(--time, 9s) linear var(--wait, 0s) 1 both,
+             dove-beat-x calc(10s / 24) steps(10) infinite, dove-beat-y calc(20s / 24) steps(2) infinite;
+}
+.flight.to-left .dove { scale: -1 1; }
+.flight.to-left.fly .dove { animation-name: dove-cross-back, dove-beat-x, dove-beat-y; }
+.dove-b { --size: 58px; --top: 58px; --time: 10.5s; --wait: 0.7s; }
+@keyframes dove-beat-x { from { background-position-x: 0%; } to { background-position-x: 111.1111%; } }
+@keyframes dove-beat-y { from { background-position-y: 0%; } to { background-position-y: 200%; } }
+@keyframes dove-cross {
+  0% { translate: -24vw 22px; opacity: 0; }
+  6% { opacity: 1; }
+  35% { translate: 24vw 0; }
+  70% { translate: 74vw 14px; }
+  94% { opacity: 1; }
+  100% { translate: 112vw 4px; opacity: 0; }
+}
+@keyframes dove-cross-back {
+  0% { translate: 112vw 22px; opacity: 0; }
+  6% { opacity: 1; }
+  35% { translate: 70vw 0; }
+  70% { translate: 22vw 14px; }
+  94% { opacity: 1; }
+  100% { translate: -24vw 4px; opacity: 0; }
+}
+@media (min-width: 900px) {
+  .dove { --size: 112px; --top: 30px; }
+  .dove-b { --size: 84px; --top: 96px; }
+}
+
 /* a band of flowers that grows in as the chapter arrives (themes set the pictures) */
 .band-film { position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none; }
 .band-film canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.5s ease; }
@@ -894,6 +934,9 @@ html.sealed .env4 { touch-action: none; }
   .theme-agapi .ch-rsvp { --fade-y: linear-gradient(#000 62%, transparent 100%); }
   .theme-agapi .ch-message, .theme-agapi .sec-closing { --fade-y: linear-gradient(transparent 0, #000 28%, #000 88%, transparent 100%); }
 }
+/* the doves of the first page, in the chapters of the middle */
+.theme-agapi .ch.near .dove-a { background-image: url("../media/doves-agapi-a.webp"); }
+.theme-agapi .ch.near .dove-b { background-image: url("../media/doves-agapi-b.webp"); }
 .theme-agapi .ch.ch-rsvp { background: linear-gradient(180deg, var(--ag-night) 0%, var(--ag-night) 46%, var(--ag-deep) 100%); }
 .theme-agapi .ch.ch-rsvp { padding-top: calc(34px + min(52vw, 400px)); }
 .theme-agapi .ch.sec-closing { padding-bottom: min(62vw, 470px); }
@@ -945,6 +988,7 @@ html.sealed .env4 { touch-action: none; }
   .title-ink { -webkit-mask-image: none; mask-image: none; animation: none; }
   .venue-art.has-film img { opacity: 1; transition: none; }
   .story img.arrived { animation: none; }
+  .flight { display: none; }
   .venue-art.art-wipe { -webkit-mask-image: none; mask-image: none; }
   .theme-agapi .ch-message::before, .theme-agapi .ch-message::after, .theme-agapi .ch-rsvp::before, .theme-agapi .ch-rsvp::after,
   .theme-agapi .sec-closing::before, .theme-agapi .sec-closing::after { opacity: 1; transform: none; }

@@ -425,6 +425,34 @@
     });
   }
 
+  // Doves that cross a chapter when the guest arrives at it (`theme.flights`). They fly once, and again
+  // when the guest has been away and comes back. Every other flight goes the other way.
+  let flightsCleanup = null;
+  function flights(root, theme) {
+    if (flightsCleanup) flightsCleanup();
+    const f = theme.flights;
+    if (REDUCED || !f || !Array.isArray(f.chapters)) return;
+    const layers = [];
+    f.chapters.forEach((name, i) => {
+      const [kind, key] = String(name).split(":");
+      const ch = [...root.querySelectorAll(".ch")].find((c) => c.dataset.ch === kind && (key === undefined || c.dataset.key === key));
+      if (!ch) return;
+      const layer = document.createElement("div");
+      layer.className = "flight" + (layers.length % 2 ? " to-left" : "");
+      layer.setAttribute("aria-hidden", "true");
+      layer.innerHTML = '<i class="dove dove-a"></i><i class="dove dove-b"></i>';
+      ch.appendChild(layer);
+      layers.push(layer);
+    });
+    if (!layers.length) return;
+    const seen = new IntersectionObserver((entries) => entries.forEach((e) => {
+      const layer = e.target.querySelector(":scope > .flight");
+      if (layer) layer.classList.toggle("fly", e.isIntersecting);
+    }), { rootMargin: "-18% 0px -30% 0px" });
+    layers.forEach((layer) => seen.observe(layer.parentElement));
+    flightsCleanup = () => { seen.disconnect(); flightsCleanup = null; };
+  }
+
   function revealOnScroll(root) {
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add("in")),
@@ -1506,6 +1534,7 @@
       wireMusic(wrap);
       wireSong(wrap);
       wholePictures(wrap);
+      flights(wrap, theme);
       revealOnScroll(wrap);
       storyEngine(wrap);
       if (theme.after) theme.after(wrap, data, opts, U);
