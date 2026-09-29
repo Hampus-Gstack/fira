@@ -957,8 +957,10 @@ class Suite:
         guest.click(".rf-step button[data-d='1']")
         guest.click(".rf-send")
         guest.wait_for_function("(document.querySelector('.rf-summary') || {}).textContent && document.querySelector('.rf-summary').textContent.includes('4')", timeout=20000)
-        # opened again on this phone: the reply, not an empty form
+        # opened again on this phone: the reply, not an empty form (the story exists once the envelope is open)
         guest.reload()
+        guest.wait_for_selector(".env4-tap")
+        self.open_envelope(guest, film=True)
         guest.wait_for_function("(document.querySelector('.rf-summary') || {}).textContent && document.querySelector('.rf-summary').textContent.includes('4')", timeout=20000)
         guest.close()
         # the link from the confirmation email, on another phone
