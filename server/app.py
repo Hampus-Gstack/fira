@@ -29,7 +29,7 @@ MAX_INVITE_BYTES = 60_000
 MAX_RSVP_BYTES = 4_000
 
 # Where the invitation pages live, and what a link preview shows when an invitation names no picture.
-SITE_BASE = os.environ.get("FIRA_SITE_BASE", "https://hampus-gstack.github.io/fira").rstrip("/")
+SITE_BASE = os.environ.get("FIRA_SITE_BASE", "https://www.ohlalainvites.com").rstrip("/")
 SHARE_IMAGE_DEFAULT = "media/env-toscana.jpg"
 SHARE_IMAGE = re.compile(r"^media/[A-Za-z0-9][A-Za-z0-9_/-]*(?:\.[A-Za-z0-9_-]+)*\.(?:jpg|jpeg|png|webp)$")
 SHARE_WORDS = {
@@ -38,6 +38,8 @@ SHARE_WORDS = {
 }
 
 ALLOWED_ORIGINS = [
+    "https://www.ohlalainvites.com",
+    "https://ohlalainvites.com",
     "https://hampus-gstack.github.io",
     "https://fira.cursuscapital.co",
     "http://localhost:8090",

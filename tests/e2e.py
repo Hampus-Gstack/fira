@@ -35,8 +35,8 @@ from playwright.sync_api import sync_playwright
 
 REPO = Path(__file__).resolve().parents[1]
 SITE = REPO / "site"
-PROD = os.environ.get("FIRA_SITE_BASE", "https://hampus-gstack.github.io/fira").rstrip("/")
-API = os.environ.get("FIRA_API_BASE", "https://fira.cursuscapital.co/api").rstrip("/")
+PROD = os.environ.get("FIRA_SITE_BASE", "https://www.ohlalainvites.com").rstrip("/")
+API = os.environ.get("FIRA_API_BASE", "https://ohlalainvites.com/api").rstrip("/")
 API_ORIGIN = API.rsplit("/api", 1)[0]
 SHARE = API_ORIGIN + "/i/"   # the link that is sent to guests
 PORT = 8090  # http://127.0.0.1:8090 is on the API's CORS allow-list

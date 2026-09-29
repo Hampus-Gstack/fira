@@ -1,4 +1,21 @@
-# Caddy site block for the API (TLS is automatic)
+# Caddy site blocks for the API (TLS is automatic). Live in /opt/postal/caddy/Caddyfile, which is
+# mounted into the container as a single file: change it in place (append or `cat new > file`), never
+# by replacing the file, or the container keeps reading the old one. Validate, then reload:
+#   docker exec postal-caddy-1 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+#   docker exec postal-caddy-1 caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
+
+# Guest links and API on the bare domain; every other path goes to the site on www (GitHub Pages)
+ohlalainvites.com {
+    @app path /i/* /api/*
+    handle @app {
+        reverse_proxy 172.18.0.1:8091
+    }
+    handle {
+        redir https://www.ohlalainvites.com{uri} 308
+    }
+}
+
+# The old host keeps answering, so links sent before 2026-09-29 still work
 fira.cursuscapital.co {
     reverse_proxy 172.18.0.1:8091
 }

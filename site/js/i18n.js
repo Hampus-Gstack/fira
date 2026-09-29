@@ -29,7 +29,7 @@ window.FIRA_I18N = {
     thanksYes: "See you there,", thanksNo: "Thank you for letting us know,", hostedBy: "",
     fewer: "Fewer", more: "More",
     // chrome
-    cta: "Confirm attendance", madeWith: "Made with Fira", toggleSound: "Sound on or off", toggleFullscreen: "Full screen on or off",
+    cta: "Confirm attendance", madeWith: "Made with Ohlala", toggleSound: "Sound on or off", toggleFullscreen: "Full screen on or off",
     replay: "Open again", replayEnd: "Open the invitation again",
   },
 
@@ -52,7 +52,7 @@ window.FIRA_I18N = {
     previewOnly: "Detta är en förhandsvisning. Publicera för att aktivera OSA.", sendFailed: "Det gick inte att skicka. Försök igen.",
     thanksYes: "Vi ses där,", thanksNo: "Tack för att du hör av dig,", hostedBy: "",
     fewer: "Färre", more: "Fler",
-    cta: "OSA här", madeWith: "Skapad med Fira", toggleSound: "Ljud av eller på", toggleFullscreen: "Helskärm av eller på",
+    cta: "OSA här", madeWith: "Skapad med Ohlala", toggleSound: "Ljud av eller på", toggleFullscreen: "Helskärm av eller på",
     replay: "Öppna igen", replayEnd: "Öppna inbjudan igen",
   },
 };

@@ -2,7 +2,7 @@
 
 Animated digital invitations. A guest gets a link, sees a sealed envelope addressed to them, taps it, and in one shot the envelope opens into the first picture of a scrolling story: the day, the place, the programme, dress code, gifts, menu, where to stay, and an RSVP that lands on the host's private dashboard. No app, no account for guests.
 
-**Live:** https://hampus-gstack.github.io/fira/
+**Live:** https://www.ohlalainvites.com (guest links on https://ohlalainvites.com/i/<id>)
 
 ## Layout
 
