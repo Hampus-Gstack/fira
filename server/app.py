@@ -125,6 +125,15 @@ def init_db():
         columns = {row[1] for row in conn.execute("PRAGMA table_info(invites)")}
         if "notify_email" not in columns:
             conn.execute("ALTER TABLE invites ADD COLUMN notify_email TEXT NOT NULL DEFAULT ''")
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(rsvps)")}
+        if "edit_token" not in columns:   # the guest's own key to their reply: stored on their phone, sent in their email
+            conn.execute("ALTER TABLE rsvps ADD COLUMN edit_token TEXT NOT NULL DEFAULT ''")
+        if "updated_at" not in columns:
+            conn.execute("ALTER TABLE rsvps ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rsvps_token ON rsvps(edit_token)")
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(mail_log)")}
+        if "kind" not in columns:
+            conn.execute("ALTER TABLE mail_log ADD COLUMN kind TEXT NOT NULL DEFAULT 'host'")
 
 
 init_db()
@@ -303,9 +312,10 @@ def create_rsvp(invite_id: str, body: RsvpIn, request: Request, background: Back
         exists = conn.execute("SELECT 1 FROM invites WHERE id=?", (invite_id,)).fetchone()
         if not exists:
             raise HTTPException(404, "Not found")
+        token = secrets.token_urlsafe(12)
         cur = conn.execute(
-            "INSERT INTO rsvps (invite_id, guest_name, attending, party_size, answers, message, created_at)"
-            " VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO rsvps (invite_id, guest_name, attending, party_size, answers, message, created_at, edit_token)"
+            " VALUES (?,?,?,?,?,?,?,?)",
             (
                 invite_id,
                 body.guest_name.strip(),
@@ -314,10 +324,66 @@ def create_rsvp(invite_id: str, body: RsvpIn, request: Request, background: Back
                 answers,
                 body.message.strip(),
                 int(time.time()),
+                token,
             ),
         )
         rsvp_id = cur.lastrowid
     background.add_task(notify_rsvp, invite_id, rsvp_id)
+    return {"ok": True, "edit": token, "confirm": MAIL_ON and bool(_guest_email(body.answers))}
+
+
+REPLY_TOKEN = re.compile(r"^[A-Za-z0-9_-]{16}$")
+
+
+def _reply_by_token(conn, token: str):
+    if not REPLY_TOKEN.match(token):
+        raise HTTPException(404, "Not found")
+    row = conn.execute("SELECT * FROM rsvps WHERE edit_token=?", (token,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Not found")
+    return row
+
+
+@app.get("/api/rsvp/{token}")
+def get_reply(token: str, request: Request):
+    """A guest's own reply, for their phone or the link in their confirmation email."""
+    rate_limit(request, "reply", limit=60)
+    with db() as conn:
+        r = _reply_by_token(conn, token)
+    return {
+        "invite_id": r["invite_id"], "guest_name": r["guest_name"], "attending": r["attending"],
+        "party_size": r["party_size"], "answers": json.loads(r["answers"] or "{}"), "message": r["message"],
+        "created_at": r["created_at"], "updated_at": r["updated_at"],
+    }
+
+
+@app.put("/api/rsvp/{token}")
+def change_reply(token: str, body: RsvpIn, request: Request, background: BackgroundTasks):
+    """The guest changes their reply: the same row is updated, so a change never counts twice."""
+    rate_limit(request, "rsvp", limit=15)
+    answers = json.dumps(body.answers)
+    if len(answers.encode()) > MAX_RSVP_BYTES:
+        raise HTTPException(413, "Answers too large")
+    with db() as conn:
+        r = _reply_by_token(conn, token)
+        conn.execute(
+            "UPDATE rsvps SET guest_name=?, attending=?, party_size=?, answers=?, message=?, updated_at=? WHERE id=?",
+            (body.guest_name.strip(), body.attending, body.party_size, answers, body.message.strip(), int(time.time()), r["id"]),
+        )
+        invite_id, rsvp_id = r["invite_id"], r["id"]
+    background.add_task(notify_rsvp, invite_id, rsvp_id, True)
+    return {"ok": True, "edit": token, "confirm": MAIL_ON and bool(_guest_email(body.answers))}
+
+
+@app.delete("/api/invites/{invite_id}/rsvps/{rsvp_id}")
+def delete_reply(invite_id: str, rsvp_id: int, x_admin_key: str | None = Header(default=None)):
+    """The host removes one reply (a test, a duplicate)."""
+    _auth(invite_id, x_admin_key)
+    with db() as conn:
+        gone = conn.execute("DELETE FROM rsvps WHERE id=? AND invite_id=?", (rsvp_id, invite_id)).rowcount
+        conn.execute("DELETE FROM mail_log WHERE rsvp_id=? AND invite_id=?", (rsvp_id, invite_id))
+    if not gone:
+        raise HTTPException(404, "Not found")
     return {"ok": True}
 
 
@@ -328,7 +394,7 @@ def get_notify(invite_id: str, x_admin_key: str | None = Header(default=None)):
     with db() as conn:
         row = conn.execute("SELECT notify_email FROM invites WHERE id=?", (invite_id,)).fetchone()
         last = conn.execute(
-            "SELECT status, created_at FROM mail_log WHERE invite_id=? ORDER BY id DESC LIMIT 1", (invite_id,)
+            "SELECT status, created_at FROM mail_log WHERE invite_id=? AND kind='host' ORDER BY id DESC LIMIT 1", (invite_id,)
         ).fetchone()
     return {"email": row["notify_email"], "mail": MAIL_ON, "last": dict(last) if last else None}
 
@@ -347,16 +413,28 @@ def set_notify(invite_id: str, body: NotifyIn, x_admin_key: str | None = Header(
 MAIL_WORDS = {
     "en": {"yes": "is coming", "no": "can't come", "maybe": "might come", "guests": "guests", "party": "Party",
            "message": "Message", "so_far": "So far: {yes} coming ({guests} guests), {no} can't come.",
-           "open": "Open your guest list", "subject": "RSVP: {name} {verb}",
-           "why": "You get this email because this address was chosen for new replies on Ohlala."},
+           "open": "Open your guest list", "subject": "RSVP: {name} {verb}", "subject_changed": "RSVP changed: {name} {verb}",
+           "changed": "changed their reply:", "why": "You get this email because this address was chosen for new replies on Ohlala.",
+           "g_subject": "Thanks for your reply – {title}", "g_subject_changed": "Your reply is updated – {title}",
+           "g_hello": "Hi {name}!", "g_got": "We have your reply:", "g_coming": "Coming", "g_not": "Not coming",
+           "g_change": "Change your reply", "g_note": "You can change your reply with the button above.",
+           "g_noreply": "This email can't be answered. Questions go to the hosts directly."},
     "sv": {"yes": "kommer", "no": "kommer inte", "maybe": "kanske kommer", "guests": "gäster", "party": "Antal",
            "message": "Hälsning", "so_far": "Hittills: {yes} kommer ({guests} gäster), {no} kommer inte.",
-           "open": "Öppna gästlistan", "subject": "OSA: {name} {verb}",
-           "why": "Du får det här mejlet för att adressen är vald för nya svar på Ohlala."},
+           "open": "Öppna gästlistan", "subject": "OSA: {name} {verb}", "subject_changed": "OSA ändrat: {name} {verb}",
+           "changed": "ändrade sitt svar:", "why": "Du får det här mejlet för att adressen är vald för nya svar på Ohlala.",
+           "g_subject": "Tack för ditt svar – {title}", "g_subject_changed": "Ditt svar är ändrat – {title}",
+           "g_hello": "Hej {name}!", "g_got": "Vi har fått ditt svar:", "g_coming": "Kommer", "g_not": "Kommer inte",
+           "g_change": "Ändra ditt svar", "g_note": "Du kan ändra ditt svar med knappen ovan.",
+           "g_noreply": "Det här mejlet går inte att svara på. Frågor tar du direkt med värdparet."},
 }
 
 
-def notify_rsvp(invite_id: str, rsvp_id: int) -> None:
+def _guest_email(answers: dict) -> str:
+    return next((v.strip() for v in answers.values() if isinstance(v, str) and EMAIL.match(v.strip())), "")
+
+
+def notify_rsvp(invite_id: str, rsvp_id: int, changed: bool = False) -> None:
     """Email one reply to the host, with our archive as a hidden copy. Runs after the guest has had their
     answer, so nothing here can fail a reply. Every attempt is written to mail_log."""
     with db() as conn:
@@ -371,32 +449,44 @@ def notify_rsvp(invite_id: str, rsvp_id: int) -> None:
     host = inv["notify_email"]
     to = [host] if host else ([MAIL_ARCHIVE] if MAIL_ARCHIVE else [])
     bcc = [MAIL_ARCHIVE] if host and MAIL_ARCHIVE and MAIL_ARCHIVE.lower() != host.lower() else []
+    status, detail = "", ""
     if str(data.get("title") or "").startswith("E2E "):
         status, detail = "test", "the suite's own invitation"
     elif not to:
         status, detail = "none", "no address"
     elif not MAIL_ON:
         status, detail = "off", "the server has no mail token"
+    guest_email = _guest_email(json.loads(r["answers"] or "{}"))
+    log = []
+    if status:
+        log.append(("host", len(to) + len(bcc), status, detail))
     else:
-        subject, text, page = _reply_mail(data, r, totals, invite_id, inv["admin_key"])
-        answers = json.loads(r["answers"] or "{}")
-        guest_email = next((v.strip() for v in answers.values() if isinstance(v, str) and EMAIL.match(v.strip())), "")
+        subject, text, page = _reply_mail(data, r, totals, invite_id, inv["admin_key"], changed)
         status, detail = _send_mail(to, bcc, subject, text, page, reply_to=guest_email)
+        log.append(("host", len(to) + len(bcc), status, detail))
+    # The guest's own confirmation, with the link that changes their reply
+    if guest_email and MAIL_ON and log[0][2] != "test":
+        subject, text, page = _guest_mail(data, r, invite_id, changed)
+        g_status, g_detail = _send_mail([guest_email], [], subject, text, page)
+        log.append(("guest", 1, g_status, g_detail))
     with db() as conn:
-        conn.execute(
-            "INSERT INTO mail_log (invite_id, rsvp_id, recipients, status, detail, created_at) VALUES (?,?,?,?,?,?)",
-            (invite_id, rsvp_id, len(to) + len(bcc), status, detail[:300], int(time.time())),
-        )
-    print(f"mail {invite_id} rsvp {rsvp_id}: {status} {detail[:120]}", flush=True)
+        for kind, count, st, det in log:
+            conn.execute(
+                "INSERT INTO mail_log (invite_id, rsvp_id, recipients, status, detail, created_at, kind) VALUES (?,?,?,?,?,?,?)",
+                (invite_id, rsvp_id, count, st, det[:300], int(time.time()), kind),
+            )
+    for kind, _, st, det in log:
+        print(f"mail {kind} {invite_id} rsvp {rsvp_id}: {st} {det[:120]}", flush=True)
 
 
-def _reply_mail(data: dict, r, totals: dict, invite_id: str, admin_key: str):
+def _reply_mail(data: dict, r, totals: dict, invite_id: str, admin_key: str, changed: bool = False):
     lang = data.get("lang") if data.get("lang") in MAIL_WORDS else "en"
     w = MAIL_WORDS[lang]
     name = " ".join(str(r["guest_name"]).split())[:80]
     verb = w.get(r["attending"], r["attending"])
     party = r["party_size"] if r["attending"] == "yes" else 0
-    subject = w["subject"].format(name=name, verb=verb) + (f" ({party} {w['guests']})" if party > 1 else "")
+    subject = w["subject_changed" if changed else "subject"].format(name=name, verb=verb) + (f" ({party} {w['guests']})" if party > 1 else "")
+    said = f"{name} {w['changed']} {verb}" if changed else f"{name} {verb}"
     title = str(data.get("title") or "")
     answers = json.loads(r["answers"] or "{}")
     lines = [f"{k}: {v}" for k, v in answers.items() if str(v).strip()]
@@ -406,7 +496,7 @@ def _reply_mail(data: dict, r, totals: dict, invite_id: str, admin_key: str):
     link = f"{SITE_BASE}/manage.html?id={quote(invite_id, safe='')}&key={quote(admin_key, safe='')}"
     message = str(r["message"] or "").strip()
     text = "\n".join(
-        [title, "", f"{name} {verb}." + (f" {w['party']}: {party}" if party else "")]
+        [title, "", f"{said}." + (f" {w['party']}: {party}" if party else "")]
         + lines + ([f"{w['message']}: {message}"] if message else []) + ["", so_far, "", f"{w['open']}: {link}", "", w["why"]]
     )
     e = lambda s: html.escape(str(s), quote=True)
@@ -418,13 +508,48 @@ def _reply_mail(data: dict, r, totals: dict, invite_id: str, admin_key: str):
     page = (
         "<div style='font-family:Georgia,serif;color:#1e2a23;max-width:520px;margin:auto;padding:24px'>"
         f"<p style='letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:#b08d3c;margin:0'>{e(title)}</p>"
-        f"<h1 style='font-size:24px;margin:8px 0 4px'>{e(name)} {e(verb)}</h1>"
+        f"<h1 style='font-size:24px;margin:8px 0 4px'>{e(said)}</h1>"
         f"<p style='margin:0 0 12px;color:#6b6b6b'>{party_line}</p>"
         f"<table style='border-collapse:collapse;font-size:15px'>{rows}</table>{quote_block}"
         f"<p style='margin:18px 0'>{e(so_far)}</p>"
         f"<p><a href='{e(link)}' style='display:inline-block;background:#c25a3a;color:#fff;text-decoration:none;"
         f"padding:12px 22px;border-radius:999px;font-family:Arial,sans-serif'>{e(w['open'])}</a></p>"
         f"<p style='font-size:12px;color:#9a9a9a;margin-top:28px'>{e(w['why'])}</p></div>"
+    )
+    return subject, text, page
+
+
+def _guest_mail(data: dict, r, invite_id: str, changed: bool):
+    lang = data.get("lang") if data.get("lang") in MAIL_WORDS else "en"
+    w = MAIL_WORDS[lang]
+    title = str(data.get("title") or "")
+    name = " ".join(str(r["guest_name"]).split())[:80]
+    yes = r["attending"] == "yes"
+    summary = w["g_coming"] + (f" · {r['party_size']} {w['guests']}" if yes and r["party_size"] > 1 else "") if yes else w["g_not"]
+    answers = json.loads(r["answers"] or "{}")
+    lines = [f"{k}: {v}" for k, v in answers.items() if str(v).strip() and not EMAIL.match(str(v).strip())]
+    message = str(r["message"] or "").strip()
+    link = f"{SITE_BASE}/i.html?id={quote(invite_id, safe='')}&reply={quote(r['edit_token'], safe='')}#rsvp"
+    deadline = str(data.get("rsvpDeadlineText") or "")
+    subject = w["g_subject_changed" if changed else "g_subject"].format(title=title)
+    text = "\n".join([title, "", w["g_hello"].format(name=name), "", f"{w['g_got']} {summary}"] + lines
+                     + ([f"{w['message']}: {message}"] if message else [])
+                     + ["", f"{w['g_change']}: {link}"] + ([deadline] if deadline else []) + ["", w["g_noreply"]])
+    e = lambda s: html.escape(str(s), quote=True)
+    rows = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#6b6b6b'>{e(k)}</td><td style='padding:4px 0'>{e(v)}</td></tr>"
+                   for k, v in answers.items() if str(v).strip() and not EMAIL.match(str(v).strip()))
+    quote_block = (f"<p style='margin:16px 0;padding:12px 16px;background:#f6f1e8;border-radius:10px;font-style:italic'>"
+                   f"{e(message)}</p>") if message else ""
+    page = (
+        "<div style='font-family:Georgia,serif;color:#1e2a23;max-width:520px;margin:auto;padding:24px'>"
+        f"<p style='letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:#b08d3c;margin:0'>{e(title)}</p>"
+        f"<h1 style='font-size:24px;margin:8px 0 12px'>{e(w['g_hello'].format(name=name))}</h1>"
+        f"<p style='margin:0 0 10px'>{e(w['g_got'])} <b>{e(summary)}</b></p>"
+        f"<table style='border-collapse:collapse;font-size:15px'>{rows}</table>{quote_block}"
+        f"<p style='margin:22px 0 8px'><a href='{e(link)}' style='display:inline-block;background:#c25a3a;color:#fff;"
+        f"text-decoration:none;padding:12px 22px;border-radius:999px;font-family:Arial,sans-serif'>{e(w['g_change'])}</a></p>"
+        + (f"<p style='margin:6px 0;color:#6b6b6b'>{e(deadline)}</p>" if deadline else "")
+        + f"<p style='font-size:12px;color:#9a9a9a;margin-top:28px'>{e(w['g_noreply'])}</p></div>"
     )
     return subject, text, page
 
@@ -468,13 +593,15 @@ def list_rsvps(invite_id: str, x_admin_key: str | None = Header(default=None)):
     _auth(invite_id, x_admin_key)
     with db() as conn:
         rows = conn.execute(
-            "SELECT guest_name, attending, party_size, answers, message, created_at"
+            "SELECT id, guest_name, attending, party_size, answers, message, created_at, updated_at"
             " FROM rsvps WHERE invite_id=? ORDER BY created_at DESC",
             (invite_id,),
         ).fetchall()
     return {
         "rsvps": [
             {
+                "id": r["id"],
+                "updated_at": r["updated_at"],
                 "guest_name": r["guest_name"],
                 "attending": r["attending"],
                 "party_size": r["party_size"],

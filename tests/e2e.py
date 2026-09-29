@@ -945,7 +945,28 @@ class Suite:
         guest.click(".rf-send")
         guest.wait_for_selector(".rf-done", timeout=20000)
         guest.wait_for_function("!document.querySelector('.cta-pill')", timeout=5000)
+
+        # -- the guest changes their mind: the form comes back as it was sent, and the same reply is updated
+        token = guest.evaluate("id => ((JSON.parse(localStorage.getItem('ohlala_replies') || '{}')[id] || [])[0] || {}).t || ''", invite_id)
+        expect(len(token) == 16, "the reply's key was not kept on the guest's phone")
+        guest.click(".rf-change")
+        expect(guest.input_value("input[name=guest_name]") == guest_name and guest.input_value("input[name=party_size]") == "3",
+               "the form to change the reply does not show what was sent")
+        expect(guest.is_checked(".rf-multi[data-q='0'] input[value='Vegan']") and guest.is_checked(".rf-radio[data-q='2'] input[value='Fish']")
+               and guest.input_value("textarea[name=message]") == "Vi kommer!", "the choices of the reply are not filled in")
+        guest.click(".rf-step button[data-d='1']")
+        guest.click(".rf-send")
+        guest.wait_for_function("(document.querySelector('.rf-summary') || {}).textContent && document.querySelector('.rf-summary').textContent.includes('4')", timeout=20000)
+        # opened again on this phone: the reply, not an empty form
+        guest.reload()
+        guest.wait_for_function("(document.querySelector('.rf-summary') || {}).textContent && document.querySelector('.rf-summary').textContent.includes('4')", timeout=20000)
         guest.close()
+        # the link from the confirmation email, on another phone
+        other = self.page()
+        other.goto(self.url(f"i.html?id={invite_id}&embed=1&reply={token}"))
+        other.wait_for_function("t => (document.querySelector('.rf-done') || {}).textContent && document.querySelector('.rf-done').textContent.includes(t)", arg=guest_name, timeout=20000)
+        other.close()
+        expect(api("GET", f"/rsvp/{'x' * 16}")[0] == 404, "an unknown reply key should answer 404")
 
         # -- host: dashboard, personal links, edit
         host = self.page(1300, 900)
@@ -955,7 +976,8 @@ class Suite:
         for needle in (guest_name, "asa@example.com", "Vegan, Nut allergy", "Fish", "Dancing Queen", "Vi kommer!"):
             expect(needle in table, f"dashboard is missing '{needle}'")
         stats = " ".join(host.inner_text(".stat-row").split())
-        expect(stats.upper().startswith("1 YES 0 NO 3 GUESTS COMING 1 TOTAL"), f"dashboard totals are wrong: {stats}")
+        expect(stats.upper().startswith("1 YES 0 NO 4 GUESTS COMING 1 TOTAL"), f"dashboard totals are wrong after the change (one reply, four guests): {stats}")
+        expect("changed" in table, "the dashboard does not mark the reply as changed")
         # -- reply emails: the host picks an address, a bad one is refused, it never shows in the public invitation,
         # and the suite's own reply is logged as a test instead of being sent
         host.fill("#nfEmail", "not-an-address")
@@ -989,6 +1011,16 @@ class Suite:
         expect(api("GET", f"/photos/{ids['second']}")[0] == 404, "removed photo is still stored after the edit")
         expect(api("GET", f"/photos/{ids['main']}")[0] == 200, "main photo was lost by the edit")
         expect(api("GET", f"/invites/{invite_id}/rsvps")[0] == 401, "guest list is readable without the host key")
+
+        # -- the host removes a reply (a test, a duplicate); the guest's key stops working
+        host = self.page(1300, 900)
+        host.goto(manage)
+        host.wait_for_selector(".dash-table", timeout=20000)
+        host.once("dialog", lambda d: d.accept())
+        host.click(".rm-reply")
+        host.wait_for_selector(".dash-empty", timeout=20000)
+        host.close()
+        expect(api("GET", f"/rsvp/{token}")[0] == 404, "a removed reply can still be opened with its key")
 
         # -- delete: the invitation and everything that belonged to it
         expect(api("DELETE", f"/invites/{invite_id}", key)[0] == 200, "delete failed")

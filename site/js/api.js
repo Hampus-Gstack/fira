@@ -40,6 +40,15 @@
         method: "POST",
         body: JSON.stringify(rsvp),
       }),
+    // A guest's own reply, by the key the server handed back when it was sent
+    getReply: (token) => req("/rsvp/" + encodeURIComponent(token)),
+    updateReply: (token, rsvp) =>
+      req("/rsvp/" + encodeURIComponent(token), { method: "PUT", body: JSON.stringify(rsvp) }),
+    deleteReply: (id, rsvpId, adminKey) =>
+      req("/invites/" + encodeURIComponent(id) + "/rsvps/" + encodeURIComponent(rsvpId), {
+        method: "DELETE",
+        headers: { "X-Admin-Key": adminKey },
+      }),
     listRsvps: (id, adminKey) =>
       req("/invites/" + encodeURIComponent(id) + "/rsvps", {
         headers: { "X-Admin-Key": adminKey },

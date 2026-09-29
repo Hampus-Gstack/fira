@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/site.css?v=20260930a">
+<link rel="stylesheet" href="css/site.css?v=20260930b">
 <style>
   .tally { display: grid; gap: 8px; margin: 0 0 24px; }
   .tally div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 18px; font-size: 15px; }
@@ -29,9 +29,9 @@
   <div class="dash-empty"><p>Loading…</p></div>
 </div>
 
-<script src="js/config.js?v=20260930a"></script>
-<script src="js/api.js?v=20260930a"></script>
-<script src="js/templates.js?v=20260930a"></script>
+<script src="js/config.js?v=20260930b"></script>
+<script src="js/api.js?v=20260930b"></script>
+<script src="js/templates.js?v=20260930b"></script>
 <script>
 (async function () {
   const dash = document.getElementById("dash");
@@ -52,6 +52,7 @@
       notify: "Email me when someone replies", notifySub: "each reply straight to your inbox", notifyPlaceholder: "you@example.com", save: "Save", saved: "Saved.",
       notifyOn: "We email this address every time a guest replies.", notifyOff: "This address is saved; reply emails start shortly.",
       notifyNone: "Add an address and we'll email you every reply.", notifyBad: "That doesn't look like an email address.", notifyFail: "Couldn't save. Check your connection.",
+      changedTag: "changed", remove: "Remove", removeConfirm: "Remove the reply from {name}? This can't be undone.",
     },
     sv: {
       copyLink: "Kopiera gästlänk", copied: "Kopierad!", view: "Visa inbjudan", edit: "Redigera inbjudan", csv: "Exportera CSV", refresh: "↻ Uppdatera",
@@ -63,6 +64,7 @@
       notify: "Mejla mig när någon svarar", notifySub: "varje svar direkt till din inkorg", notifyPlaceholder: "du@exempel.se", save: "Spara", saved: "Sparat.",
       notifyOn: "Vi mejlar hit varje gång en gäst svarar.", notifyOff: "Adressen är sparad; mejlen om nya svar startar inom kort.",
       notifyNone: "Skriv en adress så mejlar vi varje svar.", notifyBad: "Det där ser inte ut som en e-postadress.", notifyFail: "Kunde inte spara. Kontrollera anslutningen.",
+      changedTag: "ändrat", remove: "Ta bort", removeConfirm: "Ta bort svaret från {name}? Det går inte att ångra.",
     },
   };
 
@@ -151,15 +153,16 @@
       </details>
       ${rsvps.length ? `
       <div style="overflow-x:auto"><table class="dash-table">
-        <thead><tr><th>${W.guest}</th><th>${W.reply}</th><th>${W.party}</th>${qLabels.map((q) => `<th>${esc(q)}</th>`).join("")}<th>${W.message}</th><th>${W.when}</th></tr></thead>
+        <thead><tr><th>${W.guest}</th><th>${W.reply}</th><th>${W.party}</th>${qLabels.map((q) => `<th>${esc(q)}</th>`).join("")}<th>${W.message}</th><th>${W.when}</th><th></th></tr></thead>
         <tbody>${rsvps.map((r) => `
           <tr>
-            <td><b>${esc(r.guest_name)}</b></td>
+            <td><b>${esc(r.guest_name)}</b>${r.updated_at ? ` <small style="color:var(--ink-soft)">· ${W.changedTag}</small>` : ""}</td>
             <td><span class="pill ${r.attending === "yes" ? "pill-yes" : "pill-no"}">${r.attending === "yes" ? W.coming : W.declined}</span></td>
             <td>${r.attending === "yes" ? r.party_size : "—"}</td>
             ${qLabels.map((q) => `<td>${esc((r.answers || {})[q] || "—")}</td>`).join("")}
             <td>${esc(r.message || "—")}</td>
-            <td style="white-space:nowrap;color:var(--ink-soft);font-size:13px">${new Date(r.created_at * 1000).toLocaleDateString(data.lang === "sv" ? "sv-SE" : undefined)}</td>
+            <td style="white-space:nowrap;color:var(--ink-soft);font-size:13px">${new Date((r.updated_at || r.created_at) * 1000).toLocaleDateString(data.lang === "sv" ? "sv-SE" : undefined)}</td>
+            <td><button class="rm-reply" data-rm="${r.id}" data-name="${esc(r.guest_name)}" title="${esc(W.remove)}" aria-label="${esc(W.remove)}" style="border:0;background:none;color:var(--ink-soft);font-size:15px;cursor:pointer;padding:4px 8px">✕</button></td>
           </tr>`).join("")}
         </tbody></table></div>`
       : `<div class="dash-empty"><p>${W.empty}</p></div>`}
@@ -171,6 +174,12 @@
       setTimeout(() => (document.getElementById("copyLink").textContent = W.copyLink), 1500);
     });
     document.getElementById("refreshBtn").addEventListener("click", () => location.reload());
+    dash.querySelectorAll(".rm-reply").forEach((b) => b.addEventListener("click", async () => {
+      if (!confirm(W.removeConfirm.replace("{name}", b.dataset.name))) return;
+      b.disabled = true;
+      try { await FiraAPI.deleteReply(id, b.dataset.rm, key); location.reload(); }
+      catch (err) { b.disabled = false; alert(W.notifyFail); }
+    }));
     const nfSave = document.getElementById("nfSave");
     if (nfSave) nfSave.addEventListener("click", async () => {
       const status = document.getElementById("nfStatus");

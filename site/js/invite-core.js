@@ -1091,10 +1091,79 @@
   }
 
   // ---------- RSVP ----------
+  // A reply can be changed. The server hands back a key to it, which this phone keeps (per invitation,
+  // per name) and the guest's confirmation email carries as ?reply=<key>. A change updates the same reply.
+  const REPLY_STORE = "ohlala_replies";
+  const replyStore = {
+    all() { try { return JSON.parse(localStorage.getItem(REPLY_STORE)) || {}; } catch (e) { return {}; } },
+    list(inviteId) { return this.all()[inviteId] || []; },
+    put(inviteId, list) {
+      const all = this.all();
+      all[inviteId] = list.slice(0, 10);
+      try { localStorage.setItem(REPLY_STORE, JSON.stringify(all)); } catch (e) {}
+    },
+    save(inviteId, token, name) { this.put(inviteId, [{ t: token, n: name }].concat(this.list(inviteId).filter((x) => x.t !== token))); },
+    drop(inviteId, token) { this.put(inviteId, this.list(inviteId).filter((x) => x.t !== token)); },
+  };
+  const REPLY_KEY = /^[A-Za-z0-9_-]{16}$/;
+  const EMAIL_LIKE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
   function wireRsvp(root, data, opts, theme) {
     const form = root.querySelector(".rf");
     if (!form) return;
     const size = () => Math.min(20, Math.max(1, parseInt(form.party_size.value || "1", 10) || 1));
+    let editToken = null;
+    const answered = document.createElement("div");
+    answered.className = "rf-answered";
+    answered.style.display = "none";
+    form.after(answered);
+    const sendBtn = form.querySelector(".rf-send");
+
+    function showAnswered(reply, how, confirmTo) {
+      const yes = reply.attending === "yes";
+      const n = reply.party_size || 1;
+      const summary = yes ? word("replyComing") + (n > 1 ? " · " + word("guestsN").replace("{n}", n) : "") : word("replyNotComing");
+      const head = how === "new" ? `${T(yes ? "thanksYes" : "thanksNo")} ${esc(reply.guest_name)}${yes ? "! ✦" : "."}`
+        : `${T(how === "changed" ? "updated" : "youReplied")} ${esc(reply.guest_name)}.`;
+      answered.innerHTML = `<p class="rf-done">${head}</p>
+        <p class="rf-summary">${T("yourReply")}: <b>${esc(summary)}</b></p>
+        ${confirmTo ? `<p class="rf-confirm">${esc(word("confirmSent").replace("{email}", confirmTo))}</p>` : ""}
+        <button type="button" class="rf-change">${T("changeReply")}</button>`;
+      answered.querySelector(".rf-change").addEventListener("click", () => {
+        fill(reply);
+        sendBtn.textContent = word("saveChange");
+        answered.style.display = "none";
+        form.style.display = "";
+        form.querySelector(".rf-status").textContent = "";
+      });
+      form.style.display = "none";
+      answered.style.display = "";
+      const pill = document.querySelector(".cta-pill");
+      if (pill) pill.remove();
+    }
+
+    // The form as the reply was sent, so a change starts from what the guest said
+    function fill(reply) {
+      const a = reply.answers || {};
+      form.guest_name.value = reply.guest_name || "";
+      if (form.email) form.email.value = Object.values(a).find((v) => EMAIL_LIKE.test(String(v).trim())) || "";
+      form.querySelectorAll("input[name=attending]").forEach((r) => { r.checked = r.value === reply.attending; });
+      form.classList.toggle("is-no", reply.attending === "no");
+      form.party_size.value = reply.party_size || 1;
+      perGuest();
+      (data.questions || []).forEach((q, i) => {
+        const value = a[q.label];
+        const parts = value == null ? [] : String(value).split(",").map((s) => s.trim());
+        const each = form.querySelector(`.rf-perguest[data-q="${i}"]`);
+        const multi = form.querySelector(`.rf-multi[data-q="${i}"]`);
+        const radio = form.querySelector(`.rf-radio[data-q="${i}"]`);
+        if (each) each.querySelectorAll("select").forEach((s, j) => { if (parts[j]) s.value = parts[j]; });
+        else if (multi) multi.querySelectorAll("input").forEach((c) => { c.checked = parts.includes(c.value); });
+        else if (radio) { if (value != null) radio.querySelectorAll("input").forEach((c) => { c.checked = c.value === String(value); }); }
+        else { const field = form.querySelector(`[data-q="${i}"]`); if (field) field.value = value == null ? "" : value; }
+      });
+      form.message.value = reply.message || "";
+    }
 
     function perGuest() {   // one choice per guest, kept in step with the number of guests
       form.querySelectorAll(".rf-perguest").forEach((box) => {
@@ -1136,28 +1205,57 @@
           if (value) answers[q.label] = value;
         });
       }
-      const btn = form.querySelector(".rf-send");
+      const btn = sendBtn;
       btn.disabled = true;
       status.textContent = word("sending");
+      const reply = {
+        guest_name: name,
+        attending: form.attending.value,
+        party_size: yes ? size() : 1,
+        answers,
+        message: form.message.value.trim(),
+      };
       try {
         if (!opts.inviteId) throw new Error(word("previewOnly"));
-        await window.FiraAPI.sendRsvp(opts.inviteId, {
-          guest_name: name,
-          attending: form.attending.value,
-          party_size: yes ? size() : 1,
-          answers,
-          message: form.message.value.trim(),
-        });
+        const changing = !!editToken;
+        let res;
+        try {
+          res = changing ? await window.FiraAPI.updateReply(editToken, reply) : await window.FiraAPI.sendRsvp(opts.inviteId, reply);
+        } catch (err) {
+          if (!(changing && err && err.status === 404)) throw err;
+          replyStore.drop(opts.inviteId, editToken);     // the host removed it: this becomes a new reply
+          editToken = null;
+          res = await window.FiraAPI.sendRsvp(opts.inviteId, reply);
+        }
+        const fresh = !changing || !editToken;
+        if (res && res.edit) { editToken = res.edit; replyStore.save(opts.inviteId, res.edit, name); }
         const r = btn.getBoundingClientRect();
-        form.innerHTML = `<p class="rf-done">${T(yes ? "thanksYes" : "thanksNo")} ${esc(name)}${yes ? "! ✦" : "."}</p>`;
-        const pill = document.querySelector(".cta-pill");
-        if (pill) pill.remove();
-        if (yes) celebrate(theme.swatch.concat(["#FFFFFF"]), { x: r.left + r.width / 2, y: r.top });
+        btn.disabled = false;
+        status.textContent = "";
+        showAnswered(reply, fresh ? "new" : "changed", res && res.confirm && form.email ? form.email.value.trim() : "");
+        if (yes && fresh) celebrate(theme.swatch.concat(["#FFFFFF"]), { x: r.left + r.width / 2, y: r.top });
       } catch (err) {
         status.textContent = (err && err.message) || word("sendFailed");
         btn.disabled = false;
       }
     });
+
+    // Opened again on this phone, or from the link in the confirmation email: show the reply, not an empty form
+    if (opts.inviteId && window.FiraAPI && window.FiraAPI.getReply) {
+      const fromLink = REPLY_KEY.test(opts.replyToken || "") ? opts.replyToken : null;
+      const mine = replyStore.list(opts.inviteId);
+      const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+      const pick = fromLink || (opts.guestName ? (mine.find((x) => same(x.n, opts.guestName)) || {}).t : (mine[0] || {}).t);
+      if (pick) {
+        window.FiraAPI.getReply(pick).then((reply) => {
+          if (reply.invite_id !== opts.inviteId) return;
+          editToken = pick;
+          replyStore.save(opts.inviteId, pick, reply.guest_name);
+          sendBtn.textContent = word("saveChange");
+          showAnswered(reply, "", "");
+        }).catch((err) => { if (err && err.status === 404) replyStore.drop(opts.inviteId, pick); });
+      }
+    }
   }
 
   // ======================================================================
