@@ -14,9 +14,11 @@ import sqlite3
 import time
 from contextlib import contextmanager
 from pathlib import Path
+import urllib.error
+import urllib.request
 from urllib.parse import quote
 
-from fastapi import FastAPI, Header, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +47,16 @@ ALLOWED_ORIGINS = [
     "http://localhost:8090",
     "http://127.0.0.1:8090",
 ]
+
+# Email when a guest replies (Cloudflare Email Service, REST API). Off until the server has a token that may
+# send: /opt/fira/mail.env, loaded by fira.service. The host picks the address in the dashboard; it is kept in
+# its own column, apart from the invitation, which anyone with the link can read.
+MAIL_ACCOUNT = os.environ.get("OHLALA_MAIL_ACCOUNT", "")
+MAIL_TOKEN = os.environ.get("OHLALA_MAIL_TOKEN", "")
+MAIL_FROM = os.environ.get("OHLALA_MAIL_FROM", "svar@ohlalainvites.com")
+MAIL_ARCHIVE = os.environ.get("OHLALA_MAIL_ARCHIVE", "")   # our copy of every reply: a second backup
+MAIL_ON = bool(MAIL_ACCOUNT and MAIL_TOKEN)
+EMAIL = re.compile(r"^[^@\s<>,;\"']{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$")
 
 app = FastAPI(title="Fira API", docs_url=None, redoc_url=None)
 MEDIA_DIR = Path(__file__).parent / "media"
@@ -99,8 +111,20 @@ def init_db():
                 bound INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS mail_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invite_id TEXT NOT NULL,
+                rsvp_id INTEGER,
+                recipients INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                detail TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL
+            );
             """
         )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(invites)")}
+        if "notify_email" not in columns:
+            conn.execute("ALTER TABLE invites ADD COLUMN notify_email TEXT NOT NULL DEFAULT ''")
 
 
 init_db()
@@ -134,6 +158,10 @@ def rate_limit(request: Request, bucket: str, limit: int, window: float = 60.0):
 
 class InviteIn(BaseModel):
     data: dict
+
+
+class NotifyIn(BaseModel):
+    email: str = Field(default="", max_length=254)
 
 
 class RsvpIn(BaseModel):
@@ -266,7 +294,7 @@ def update_invite(
 
 
 @app.post("/api/invites/{invite_id}/rsvp")
-def create_rsvp(invite_id: str, body: RsvpIn, request: Request):
+def create_rsvp(invite_id: str, body: RsvpIn, request: Request, background: BackgroundTasks):
     rate_limit(request, "rsvp", limit=15)
     answers = json.dumps(body.answers)
     if len(answers.encode()) > MAX_RSVP_BYTES:
@@ -275,7 +303,7 @@ def create_rsvp(invite_id: str, body: RsvpIn, request: Request):
         exists = conn.execute("SELECT 1 FROM invites WHERE id=?", (invite_id,)).fetchone()
         if not exists:
             raise HTTPException(404, "Not found")
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO rsvps (invite_id, guest_name, attending, party_size, answers, message, created_at)"
             " VALUES (?,?,?,?,?,?,?)",
             (
@@ -288,7 +316,151 @@ def create_rsvp(invite_id: str, body: RsvpIn, request: Request):
                 int(time.time()),
             ),
         )
+        rsvp_id = cur.lastrowid
+    background.add_task(notify_rsvp, invite_id, rsvp_id)
     return {"ok": True}
+
+
+@app.get("/api/invites/{invite_id}/notify")
+def get_notify(invite_id: str, x_admin_key: str | None = Header(default=None)):
+    """Where reply emails go, whether the server can send, and how the last one went."""
+    _auth(invite_id, x_admin_key)
+    with db() as conn:
+        row = conn.execute("SELECT notify_email FROM invites WHERE id=?", (invite_id,)).fetchone()
+        last = conn.execute(
+            "SELECT status, created_at FROM mail_log WHERE invite_id=? ORDER BY id DESC LIMIT 1", (invite_id,)
+        ).fetchone()
+    return {"email": row["notify_email"], "mail": MAIL_ON, "last": dict(last) if last else None}
+
+
+@app.put("/api/invites/{invite_id}/notify")
+def set_notify(invite_id: str, body: NotifyIn, x_admin_key: str | None = Header(default=None)):
+    _auth(invite_id, x_admin_key)
+    email = body.email.strip()
+    if email and not EMAIL.match(email):
+        raise HTTPException(422, "Not an email address")
+    with db() as conn:
+        conn.execute("UPDATE invites SET notify_email=? WHERE id=?", (email, invite_id))
+    return {"email": email, "mail": MAIL_ON}
+
+
+MAIL_WORDS = {
+    "en": {"yes": "is coming", "no": "can't come", "maybe": "might come", "guests": "guests", "party": "Party",
+           "message": "Message", "so_far": "So far: {yes} coming ({guests} guests), {no} can't come.",
+           "open": "Open your guest list", "subject": "RSVP: {name} {verb}",
+           "why": "You get this email because this address was chosen for new replies on Ohlala."},
+    "sv": {"yes": "kommer", "no": "kommer inte", "maybe": "kanske kommer", "guests": "gäster", "party": "Antal",
+           "message": "Hälsning", "so_far": "Hittills: {yes} kommer ({guests} gäster), {no} kommer inte.",
+           "open": "Öppna gästlistan", "subject": "OSA: {name} {verb}",
+           "why": "Du får det här mejlet för att adressen är vald för nya svar på Ohlala."},
+}
+
+
+def notify_rsvp(invite_id: str, rsvp_id: int) -> None:
+    """Email one reply to the host, with our archive as a hidden copy. Runs after the guest has had their
+    answer, so nothing here can fail a reply. Every attempt is written to mail_log."""
+    with db() as conn:
+        inv = conn.execute("SELECT data, admin_key, notify_email FROM invites WHERE id=?", (invite_id,)).fetchone()
+        r = conn.execute("SELECT * FROM rsvps WHERE id=?", (rsvp_id,)).fetchone()
+        totals = {row["attending"]: (row["n"], row["g"]) for row in conn.execute(
+            "SELECT attending, count(*) AS n, coalesce(sum(party_size), 0) AS g FROM rsvps WHERE invite_id=? GROUP BY attending",
+            (invite_id,))}
+    if not inv or not r:
+        return
+    data = json.loads(inv["data"])
+    host = inv["notify_email"]
+    to = [host] if host else ([MAIL_ARCHIVE] if MAIL_ARCHIVE else [])
+    bcc = [MAIL_ARCHIVE] if host and MAIL_ARCHIVE and MAIL_ARCHIVE.lower() != host.lower() else []
+    if str(data.get("title") or "").startswith("E2E "):
+        status, detail = "test", "the suite's own invitation"
+    elif not to:
+        status, detail = "none", "no address"
+    elif not MAIL_ON:
+        status, detail = "off", "the server has no mail token"
+    else:
+        subject, text, page = _reply_mail(data, r, totals, invite_id, inv["admin_key"])
+        answers = json.loads(r["answers"] or "{}")
+        guest_email = next((v.strip() for v in answers.values() if isinstance(v, str) and EMAIL.match(v.strip())), "")
+        status, detail = _send_mail(to, bcc, subject, text, page, reply_to=guest_email)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO mail_log (invite_id, rsvp_id, recipients, status, detail, created_at) VALUES (?,?,?,?,?,?)",
+            (invite_id, rsvp_id, len(to) + len(bcc), status, detail[:300], int(time.time())),
+        )
+    print(f"mail {invite_id} rsvp {rsvp_id}: {status} {detail[:120]}", flush=True)
+
+
+def _reply_mail(data: dict, r, totals: dict, invite_id: str, admin_key: str):
+    lang = data.get("lang") if data.get("lang") in MAIL_WORDS else "en"
+    w = MAIL_WORDS[lang]
+    name = " ".join(str(r["guest_name"]).split())[:80]
+    verb = w.get(r["attending"], r["attending"])
+    party = r["party_size"] if r["attending"] == "yes" else 0
+    subject = w["subject"].format(name=name, verb=verb) + (f" ({party} {w['guests']})" if party > 1 else "")
+    title = str(data.get("title") or "")
+    answers = json.loads(r["answers"] or "{}")
+    lines = [f"{k}: {v}" for k, v in answers.items() if str(v).strip()]
+    yes_n, yes_g = totals.get("yes", (0, 0))
+    no_n = totals.get("no", (0, 0))[0]
+    so_far = w["so_far"].format(yes=yes_n, guests=yes_g, no=no_n)
+    link = f"{SITE_BASE}/manage.html?id={quote(invite_id, safe='')}&key={quote(admin_key, safe='')}"
+    message = str(r["message"] or "").strip()
+    text = "\n".join(
+        [title, "", f"{name} {verb}." + (f" {w['party']}: {party}" if party else "")]
+        + lines + ([f"{w['message']}: {message}"] if message else []) + ["", so_far, "", f"{w['open']}: {link}", "", w["why"]]
+    )
+    e = lambda s: html.escape(str(s), quote=True)
+    rows = "".join(f"<tr><td style='padding:4px 12px 4px 0;color:#6b6b6b'>{e(k)}</td><td style='padding:4px 0'>{e(v)}</td></tr>"
+                   for k, v in answers.items() if str(v).strip())
+    quote_block = (f"<p style='margin:16px 0;padding:12px 16px;background:#f6f1e8;border-radius:10px;font-style:italic'>"
+                   f"{e(message)}</p>") if message else ""
+    party_line = f"{e(w['party'])}: {party}" if party else ""
+    page = (
+        "<div style='font-family:Georgia,serif;color:#1e2a23;max-width:520px;margin:auto;padding:24px'>"
+        f"<p style='letter-spacing:.12em;text-transform:uppercase;font-size:12px;color:#b08d3c;margin:0'>{e(title)}</p>"
+        f"<h1 style='font-size:24px;margin:8px 0 4px'>{e(name)} {e(verb)}</h1>"
+        f"<p style='margin:0 0 12px;color:#6b6b6b'>{party_line}</p>"
+        f"<table style='border-collapse:collapse;font-size:15px'>{rows}</table>{quote_block}"
+        f"<p style='margin:18px 0'>{e(so_far)}</p>"
+        f"<p><a href='{e(link)}' style='display:inline-block;background:#c25a3a;color:#fff;text-decoration:none;"
+        f"padding:12px 22px;border-radius:999px;font-family:Arial,sans-serif'>{e(w['open'])}</a></p>"
+        f"<p style='font-size:12px;color:#9a9a9a;margin-top:28px'>{e(w['why'])}</p></div>"
+    )
+    return subject, text, page
+
+
+def _send_mail(to: list, bcc: list, subject: str, text: str, page: str, reply_to: str = "") -> tuple:
+    """Cloudflare Email Service. Returns (status, detail); never raises, never logs the token or the addresses."""
+    body = {"to": to, "from": {"address": MAIL_FROM, "name": "Ohlala"}, "subject": subject, "text": text, "html": page}
+    if bcc:
+        body["bcc"] = bcc
+    if reply_to:
+        body["reply_to"] = reply_to
+    url = f"https://api.cloudflare.com/client/v4/accounts/{MAIL_ACCOUNT}/email/sending/send"
+    detail = ""
+    for attempt in range(3):
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers={
+            "Authorization": "Bearer " + MAIL_TOKEN, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                out = json.load(resp)
+            result = out.get("result") or {}
+            counts = {k: len(v) for k, v in result.items() if isinstance(v, list)}
+            if not out.get("success"):
+                return "failed", json.dumps(out.get("errors"))[:300]
+            bad = counts.get("permanent_bounces", 0) + counts.get("suppressed_recipients", 0)
+            return ("bounced" if bad else "sent"), json.dumps(counts)
+        except urllib.error.HTTPError as err:
+            try:
+                detail = f"{err.code} " + json.dumps(json.load(err).get("errors"))
+            except Exception:
+                detail = f"HTTP {err.code}"
+            if err.code != 429 and err.code < 500:
+                return "failed", detail
+        except Exception as err:
+            detail = type(err).__name__
+        time.sleep(4 * (attempt + 1))
+    return "failed", "gave up: " + detail
 
 
 @app.get("/api/invites/{invite_id}/rsvps")
@@ -395,6 +567,7 @@ def delete_invite(invite_id: str, x_admin_key: str | None = Header(default=None)
         row = conn.execute("SELECT data FROM invites WHERE id=?", (invite_id,)).fetchone()
         photo_ids = _photo_ids(json.loads(row["data"])) if row else set()
         conn.execute("DELETE FROM rsvps WHERE invite_id=?", (invite_id,))
+        conn.execute("DELETE FROM mail_log WHERE invite_id=?", (invite_id,))
         conn.execute("DELETE FROM invites WHERE id=?", (invite_id,))
         _release_photos(conn, photo_ids)
     return {"ok": True}

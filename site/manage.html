@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/site.css?v=20260929d">
+<link rel="stylesheet" href="css/site.css?v=20260930a">
 <style>
   .tally { display: grid; gap: 8px; margin: 0 0 24px; }
   .tally div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 18px; font-size: 15px; }
@@ -29,9 +29,9 @@
   <div class="dash-empty"><p>Loading…</p></div>
 </div>
 
-<script src="js/config.js?v=20260929d"></script>
-<script src="js/api.js?v=20260929d"></script>
-<script src="js/templates.js?v=20260929d"></script>
+<script src="js/config.js?v=20260930a"></script>
+<script src="js/api.js?v=20260930a"></script>
+<script src="js/templates.js?v=20260930a"></script>
 <script>
 (async function () {
   const dash = document.getElementById("dash");
@@ -49,6 +49,9 @@
       linksPlaceholder: "One guest or family per line:\nAnna & Johan\nFamiljen Berg", generate: "Generate links", copy: "Copy", addName: "Add at least one name above.",
       guest: "Guest", reply: "Reply", party: "Party", partySize: "Party size", message: "Message", when: "When", date: "Date",
       coming: "Coming", declined: "Declined", empty: "No replies yet. Share your guest link and watch this page fill up ✦", yourEvent: "Your event",
+      notify: "Email me when someone replies", notifySub: "each reply straight to your inbox", notifyPlaceholder: "you@example.com", save: "Save", saved: "Saved.",
+      notifyOn: "We email this address every time a guest replies.", notifyOff: "This address is saved; reply emails start shortly.",
+      notifyNone: "Add an address and we'll email you every reply.", notifyBad: "That doesn't look like an email address.", notifyFail: "Couldn't save. Check your connection.",
     },
     sv: {
       copyLink: "Kopiera gästlänk", copied: "Kopierad!", view: "Visa inbjudan", edit: "Redigera inbjudan", csv: "Exportera CSV", refresh: "↻ Uppdatera",
@@ -57,6 +60,9 @@
       linksPlaceholder: "En gäst eller familj per rad:\nAnna & Johan\nFamiljen Berg", generate: "Skapa länkar", copy: "Kopiera", addName: "Skriv minst ett namn ovan.",
       guest: "Gäst", reply: "Svar", party: "Antal", partySize: "Antal gäster", message: "Hälsning", when: "När", date: "Datum",
       coming: "Kommer", declined: "Kommer inte", empty: "Inga svar ännu. Dela gästlänken så fylls sidan på ✦", yourEvent: "Ert evenemang",
+      notify: "Mejla mig när någon svarar", notifySub: "varje svar direkt till din inkorg", notifyPlaceholder: "du@exempel.se", save: "Spara", saved: "Sparat.",
+      notifyOn: "Vi mejlar hit varje gång en gäst svarar.", notifyOff: "Adressen är sparad; mejlen om nya svar startar inom kort.",
+      notifyNone: "Skriv en adress så mejlar vi varje svar.", notifyBad: "Det där ser inte ut som en e-postadress.", notifyFail: "Kunde inte spara. Kontrollera anslutningen.",
     },
   };
 
@@ -82,7 +88,8 @@
 
   // ---------- full dashboard ----------
   try {
-    const [inviteRes, rsvpRes] = await Promise.all([FiraAPI.getInvite(id), FiraAPI.listRsvps(id, key)]);
+    const [inviteRes, rsvpRes, notify] = await Promise.all([FiraAPI.getInvite(id), FiraAPI.listRsvps(id, key),
+      FiraAPI.getNotify(id, key).catch(() => null)]);
     const data = inviteRes.data;
     const rsvps = rsvpRes.rsvps;
     const W = WORDS[data.lang] || WORDS.en;
@@ -97,6 +104,7 @@
     const shareUrl = FIRA_CONFIG.SHARE_BASE ? FIRA_CONFIG.SHARE_BASE + encodeURIComponent(id) : direct;
     const personal = (name) => shareUrl + (shareUrl.includes("?") ? "&" : "?") + "to=" + encodeURIComponent(name);
     const qLabels = [...new Set(rsvps.flatMap((r) => Object.keys(r.answers || {})))];
+    const notifyState = (n) => (!n.email ? W.notifyNone : n.mail ? W.notifyOn : W.notifyOff);
 
     // What the kitchen needs: how many of each choice, counted over the guests who are coming.
     const tallies = (data.questions || []).filter((q) => (q.options || []).length).map((q) => {
@@ -124,6 +132,15 @@
         <div class="stat"><b>${rsvps.length}</b><span>${W.total}</span></div>
       </div>
       ${tallies ? `<div class="tally" id="tally">${tallies}</div>` : ""}
+      ${notify ? `
+      <div style="margin:0 0 18px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 20px">
+        <label for="nfEmail" style="font-weight:600">🔔 ${W.notify} <span style="font-weight:400;color:var(--ink-soft);font-size:13px">· ${W.notifySub}</span></label>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <input id="nfEmail" type="email" autocomplete="email" maxlength="254" value="${esc(notify.email)}" placeholder="${esc(W.notifyPlaceholder)}" style="flex:1;min-width:200px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:var(--body);font-size:15px;box-sizing:border-box">
+          <button class="btn btn-ghost" id="nfSave" style="padding:9px 20px;font-size:14px">${W.save}</button>
+        </div>
+        <p id="nfStatus" style="margin:8px 0 0;font-size:13px;color:var(--ink-soft)">${esc(notifyState(notify))}</p>
+      </div>` : ""}
       <details style="margin:0 0 26px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:6px 20px">
         <summary style="cursor:pointer;font-weight:600;padding:12px 0">✉️ ${W.links} <span style="font-weight:400;color:var(--ink-soft);font-size:13px">· ${W.linksSub}</span></summary>
         <div style="padding:6px 0 16px">
@@ -154,6 +171,16 @@
       setTimeout(() => (document.getElementById("copyLink").textContent = W.copyLink), 1500);
     });
     document.getElementById("refreshBtn").addEventListener("click", () => location.reload());
+    const nfSave = document.getElementById("nfSave");
+    if (nfSave) nfSave.addEventListener("click", async () => {
+      const status = document.getElementById("nfStatus");
+      try {
+        const res = await FiraAPI.setNotify(id, document.getElementById("nfEmail").value.trim(), key);
+        status.textContent = W.saved + " " + notifyState(res);
+      } catch (err) {
+        status.textContent = err.status === 422 ? W.notifyBad : W.notifyFail;
+      }
+    });
     document.getElementById("plGen").addEventListener("click", () => {
       const out = document.getElementById("plOut");
       const names = document.getElementById("plNames").value.split("\n").map((s) => s.trim()).filter(Boolean);

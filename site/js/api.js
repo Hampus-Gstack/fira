@@ -44,6 +44,17 @@
       req("/invites/" + encodeURIComponent(id) + "/rsvps", {
         headers: { "X-Admin-Key": adminKey },
       }),
+    // Where reply emails go. Kept apart from the invitation, which anyone with the link can read.
+    getNotify: (id, adminKey) =>
+      req("/invites/" + encodeURIComponent(id) + "/notify", {
+        headers: { "X-Admin-Key": adminKey },
+      }),
+    setNotify: (id, email, adminKey) =>
+      req("/invites/" + encodeURIComponent(id) + "/notify", {
+        method: "PUT",
+        body: JSON.stringify({ email }),
+        headers: { "X-Admin-Key": adminKey },
+      }),
   };
 
   // Local registry of invitations this browser created ("My invitations").

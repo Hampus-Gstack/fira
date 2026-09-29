@@ -7,6 +7,9 @@ After=network.target
 
 [Service]
 WorkingDirectory=/opt/fira
+# Reply emails: OHLALA_MAIL_ACCOUNT, OHLALA_MAIL_TOKEN (may send email), OHLALA_MAIL_ARCHIVE. Optional (the dash):
+# without it the API runs and logs reply mails as "off". Mode 600, never in git.
+EnvironmentFile=-/opt/fira/mail.env
 ExecStart=/opt/fira/.venv/bin/uvicorn app:app --host 172.18.0.1 --port 8091
 Restart=always
 RestartSec=3
