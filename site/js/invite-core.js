@@ -210,7 +210,9 @@
   }
 
   // ---------- pointer / gyro parallax (uses the `translate` property; position with margins) ----------
+  let parallaxCleanup = null;
   function parallax(stage) {
+    if (parallaxCleanup) parallaxCleanup();
     if (REDUCED) return;
     const els = () => stage.querySelectorAll("[data-depth]");
     let tx = 0, ty = 0, cx = 0, cy = 0, running = false;
@@ -224,17 +226,20 @@
       else running = false;
     }
     function kick() { if (!running) { running = true; requestAnimationFrame(apply); } }
-    addEventListener("pointermove", (e) => {
+    const point = (e) => {
       tx = (e.clientX / innerWidth - 0.5) * 22;
       ty = (e.clientY / innerHeight - 0.5) * 22;
       kick();
-    }, { passive: true });
-    addEventListener("deviceorientation", (e) => {
+    };
+    const tilt = (e) => {
       if (e.gamma == null) return;
       tx = Math.max(-24, Math.min(24, e.gamma)) * 0.9;
       ty = Math.max(-24, Math.min(24, (e.beta || 0) - 40)) * 0.6;
       kick();
-    }, { passive: true });
+    };
+    addEventListener("pointermove", point, { passive: true });
+    addEventListener("deviceorientation", tilt, { passive: true });
+    parallaxCleanup = () => { removeEventListener("pointermove", point); removeEventListener("deviceorientation", tilt); parallaxCleanup = null; };
   }
 
   // ---------- scroll-story engine ----------
@@ -404,6 +409,8 @@
       removeEventListener("scroll", onScroll);
       removeEventListener("resize", onResize);
       near.disconnect();
+      films.forEach((film) => { film.pause(); film.release(); });
+      films.clear();
     };
     update();
   }
@@ -1178,6 +1185,8 @@
     </svg>`;
   }
 
+  const REPLAY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9.5 9.5 0 00-6.6 2.7L3 8"/><path d="M3 3v5h5"/></svg>`;
+
   const address = (data, opts) => (opts.guestName
     ? `${T("for")} ${esc(opts.guestName)}`
     : esc(data.envelopeTeaser || word("teaser")));
@@ -1261,6 +1270,11 @@
     stage.appendChild(b);
   }
 
+  // The sound hint on a sealed envelope. Guests opened the invitation with their phone turned down and
+  // never heard it (Hampus, 2026-09-29), so it is a card of its own, above the words that say "tap".
+  const soundHint = () => `
+      <p class="env4-sound"><span class="snd-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path class="w1" d="M15.5 8.5a5 5 0 010 7"/><path class="w2" d="M18.5 5.5a9 9 0 010 13"/></svg></span><span class="snd-words"><b>${T("soundHint")}</b><small>${T("soundWhy")}</small></span></p>`;
+
   // After the tap: play the film, with sound if the browser allows it. While the film is still on its
   // way (a slow connection), the hint says so. `done` is called once: when the film has ended or failed,
   // a while after it should have ended, or when it never started.
@@ -1299,7 +1313,7 @@
       <div class="env4-scrim"></div>
       <p class="env4-addr">${address(data, opts)}</p>
       ${mono}
-      <p class="env4-sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>${T("soundHint")}</p>
+      ${soundHint()}
       <p class="env4-hint">${T("tapToOpen")}</p>
       <button class="env4-tap" aria-label="${T("openInvitation")}"></button>`;
     mount.appendChild(env);
@@ -1383,7 +1397,7 @@
       <div class="env4-scrim"></div>
       <p class="env4-addr">${address(data, opts)}</p>
       ${o.monogram === false ? "" : `<div class="env4-mono" style="left:${Number(sp.x) || 50}%;top:${Number(sp.y) || 50}%;--seal-k:${(Number(o.sealSize) || 24) / 100}">${esc(monogram(data))}</div>`}
-      <p class="env4-sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg>${T("soundHint")}</p>
+      ${soundHint()}
       <p class="env4-hint">${T("tapToOpen")}</p>
       <button class="env4-tap" aria-label="${T("openInvitation")}"></button>`;
     stage.appendChild(env);
@@ -1515,13 +1529,15 @@
   // render(data, mount, opts)
   // opts: { inviteId, skipEnvelope, noRsvp, guestName, noFullscreen, noFilm, noMusic, startMuted }
   // ======================================================================
+  let chromeCleanup = null;
   function render(data, mount, opts = {}) {
     const theme = window.FIRA_TEMPLATES[data.template] || window.FIRA_TEMPLATES.botanical;
     buildLabels(data, theme);
     if (unseal) unseal();
+    if (chromeCleanup) chromeCleanup();
     soundState.reset();
     mount.innerHTML = "";
-    document.querySelectorAll(".cta-pill, .fs-toggle, .snd-toggle, .celebrate-canvas").forEach((el) => el.remove());
+    document.querySelectorAll(".cta-pill, .fs-toggle, .snd-toggle, .replay, .celebrate-canvas").forEach((el) => el.remove());
     mount.className = "inv-root theme-" + theme.id;
     document.documentElement.lang = LBL._lang;
     if (theme.fonts && !document.getElementById("f-" + theme.id)) {
@@ -1543,6 +1559,14 @@
     const film = !!(o.video && !opts.noFilm) && !opts.skipEnvelope && !REDUCED;
     const lands = film && Number(o.lands) > 0;      // the film ends on the hero picture and plays inside it
 
+    // Open the invitation again: the sealed envelope as it came, with its film and its music from the
+    // start. For a guest who opened it with the sound off, or wants to see it once more.
+    const sealedFirst = !opts.skipEnvelope && !REDUCED;
+    const replay = () => {
+      scrollTo(0, 0);
+      render(data, mount, opts);
+    };
+
     // `held`: the story is built behind the sealed envelope and waits there until the film has landed.
     const showStory = (held) => {
       if (stage.querySelector(".story")) return () => {};
@@ -1559,8 +1583,13 @@
           const [kind, arg] = String(name).split(":");
           return CH[kind] ? CH[kind](data, theme, chapterOpts, arg) : "";
         }).join("")}
-        <footer class="story-foot"><a class="inv-fira" href="index.html" target="_blank" rel="noopener">${T("madeWith")}</a></footer>`;
+        <footer class="story-foot">
+          ${sealedFirst ? `<button class="replay-end" type="button">${REPLAY_ICON}<span>${T("replayEnd")}</span></button>` : ""}
+          <a class="inv-fira" href="index.html" target="_blank" rel="noopener">${T("madeWith")}</a>
+        </footer>`;
       stage.appendChild(wrap);
+      const again = wrap.querySelector(".replay-end");
+      if (again) again.addEventListener("click", replay);
       wrap.querySelectorAll(".ch:not(.ch-hero)").forEach((ch, i) => ch.classList.add(i % 2 ? "band-b" : "band-a"));
       wrap.querySelectorAll(".inv-countdown").forEach((el) => countdown(el, data));
       wireRsvp(wrap, data, opts, theme);
@@ -1576,8 +1605,21 @@
       return chrome;
     };
 
-    // The reply shortcut and the full-screen button: they belong to the open page.
+    // The reply shortcut, "open again" and the full-screen button: they belong to the open page.
     const addChrome = (wrap) => {
+      if (sealedFirst) {                              // at the top of the page; it steps aside while the guest reads
+        const again = document.createElement("button");
+        again.type = "button";
+        again.className = "replay";
+        again.innerHTML = `${REPLAY_ICON}<span>${T("replay")}</span>`;
+        again.addEventListener("click", replay);
+        stage.appendChild(again);
+        const away = () => again.classList.toggle("away", scrollY > innerHeight * 0.3);
+        addEventListener("scroll", away, { passive: true });
+        chromeCleanup = () => { removeEventListener("scroll", away); chromeCleanup = null; };
+        away();
+        setTimeout(() => again.classList.add("show"), 1600);
+      }
       if (!opts.noRsvp && wrap.querySelector("#rsvp")) {
         const pill = document.createElement("button");
         pill.className = "cta-pill" + (theme.ctaStyle === "scroll" ? " cta-scroll" : "");
@@ -1587,10 +1629,14 @@
         pill.addEventListener("click", () => glideTo(wrap.querySelector("#rsvp")));
         stage.appendChild(pill);
         setTimeout(() => pill.classList.add("show"), 2400);
-        new IntersectionObserver((es) =>
-          es.forEach((e) => pill.classList.toggle("hide", e.isIntersecting)),
-          { threshold: 0.2 }
-        ).observe(wrap.querySelector("#rsvp"));
+        // It steps aside at the reply form and at the end of the story, where "open again" is.
+        const inView = new Set();
+        const io = new IntersectionObserver((es) => {
+          es.forEach((e) => (e.isIntersecting ? inView.add(e.target) : inView.delete(e.target)));
+          pill.classList.toggle("hide", inView.size > 0);
+        }, { threshold: 0.2 });
+        io.observe(wrap.querySelector("#rsvp"));
+        io.observe(wrap.querySelector(".story-foot"));
       }
       if (!opts.skipEnvelope && !opts.noFullscreen && canFullscreen()) {
         const fs = document.createElement("button");

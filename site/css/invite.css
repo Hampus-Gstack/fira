@@ -42,16 +42,31 @@
   animation: hint-pulse 2.6s ease-in-out infinite;
 }
 .env4-tap { position: absolute; inset: 0; z-index: 3; border: 0; background: transparent; cursor: pointer; }
+/* The sound hint is a card of its own: a small grey line was read past, and guests opened the
+   invitation with their phone turned down. */
 .env4-sound {
   position: absolute; left: 50%; translate: -50% 0; z-index: 2; margin: 0;
-  bottom: calc(max(30px, env(safe-area-inset-bottom, 30px)) + 44px);
-  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 12px; border-radius: 999px;
-  font-family: var(--t-body), system-ui, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
-  text-transform: uppercase; white-space: nowrap; color: #fff;
-  background: rgba(20, 18, 16, 0.46); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  animation: env-in 1.2s 1.3s ease backwards;
+  bottom: calc(max(30px, env(safe-area-inset-bottom, 30px)) + 42px);
+  display: flex; align-items: center; gap: 13px; padding: 9px 22px 9px 9px; border-radius: 999px;
+  font-family: var(--t-body), system-ui, sans-serif; text-align: left; white-space: nowrap; color: #fff;
+  background: var(--t-env-sound-bg, rgba(20, 18, 16, 0.7)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.26);
+  animation: env-in 1.1s 1s ease backwards;
 }
-.env4-sound svg { width: 15px; height: 15px; flex: 0 0 15px; }
+.env4-sound .snd-ic {
+  position: relative; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(255, 255, 255, 0.16);
+}
+.env4-sound .snd-ic::after {               /* a ring that goes out from the speaker, again and again */
+  content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid currentColor; opacity: 0;
+  animation: snd-ping 2.4s ease-out 2.2s infinite;
+}
+.env4-sound svg { width: 22px; height: 22px; }
+.env4-sound .w1 { animation: snd-wave 1.4s ease-in-out infinite; }
+.env4-sound .w2 { animation: snd-wave 1.4s ease-in-out 0.25s infinite; }
+.env4-sound b { display: block; font-size: 14px; font-weight: 700; line-height: 1.2; letter-spacing: 0.14em; text-transform: uppercase; }
+.env4-sound small { display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.25; letter-spacing: 0.02em; opacity: 0.86; }
+@keyframes snd-ping { from { transform: scale(1); opacity: 0.75; } to { transform: scale(1.75); opacity: 0; } }
 @keyframes env-in { from { opacity: 0; transform: translateY(8px); } }
 /* An element with a filled entrance animation ignores a plain `opacity: 0`, so the exit is an animation too. */
 .env4.opening .env4-addr, .env4.opening .env4-hint, .env4.opening .env4-mono, .env4.opening .env4-sound { animation: env-out 0.7s ease forwards; }
@@ -77,6 +92,27 @@
 .snd-toggle.on .w1 { animation: snd-wave 1.4s ease-in-out infinite; }
 .snd-toggle.on .w2 { animation: snd-wave 1.4s ease-in-out 0.25s infinite; }
 @keyframes snd-wave { 0%,100% { opacity: 0.45; } 50% { opacity: 1; } }
+/* While the envelope is sealed the card above says what to do; the button comes with the tap. */
+.snd-toggle { transition: opacity 0.6s ease; }
+.env4:not(.opening) ~ .snd-toggle { opacity: 0; pointer-events: none; }
+
+/* Open the invitation again: at the top of the open page, stepping aside while the guest reads */
+.replay {
+  position: fixed; top: max(14px, env(safe-area-inset-top, 14px)); left: 14px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 15px 0 11px; border: 0; border-radius: 999px;
+  cursor: pointer; color: #fff; background: rgba(20, 18, 16, 0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  font-family: var(--t-body), system-ui, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  opacity: 0; translate: 0 -8px; pointer-events: none; transition: opacity 0.5s ease, translate 0.5s ease;
+}
+.replay svg, .replay-end svg { width: 16px; height: 16px; flex: 0 0 16px; }
+.replay.show { opacity: 1; translate: 0 0; pointer-events: auto; }
+.replay.show.away { opacity: 0; translate: 0 -8px; pointer-events: none; }
+/* and at the end of the story */
+.replay-end {
+  display: inline-flex; align-items: center; gap: 9px; margin: 0 0 18px; padding: 12px 22px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 38%, transparent); background: transparent; color: inherit; cursor: pointer;
+  font-family: var(--t-body), system-ui, sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+}
 
 /* ================= coded envelope (fallback themes) ================= */
 .env3 {
@@ -366,6 +402,7 @@ a.sec-card:hover .sc-art img { transform: scale(1.05); }
 .rf.is-no .rf-yes { display: none; }
 .story-foot { position: relative; z-index: 3; text-align: center; padding: 20px 0 34px; }
 .story-foot .inv-fira { margin-top: 0; }
+.story-foot .replay-end + .inv-fira { display: block; }
 .ph-frame.pf-arch {
   width: min(76vw, 400px); height: auto; aspect-ratio: 3 / 4.1; border-radius: 999px 999px 8px 8px;
   box-shadow: 0 0 0 5px var(--t-bg), 0 0 0 6.5px var(--t-accent), 0 0 0 13px var(--t-bg),
@@ -862,6 +899,9 @@ html.sealed .env4 { touch-action: none; }
 .theme-agapi .env4-scrim { background: linear-gradient(180deg, rgba(255, 252, 245, 0.45) 0%, rgba(255, 252, 245, 0) 27%, rgba(255, 252, 245, 0) 74%, rgba(255, 252, 245, 0.55) 100%); }
 /* the seal is white wax: the letters are pressed into it, a shade darker, with light on their lower edge */
 .theme-agapi .env4-mono { color: #8E7C58; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85), 0 -1px 0 rgba(70, 55, 25, 0.22); opacity: 0.9; font-size: calc(var(--seal-w) * 0.4); }
+.theme-agapi .env4-sound { --t-env-sound-bg: rgba(21, 39, 74, 0.9); font-family: "EB Garamond", serif; }
+.theme-agapi .env4-sound b { font-size: 15px; font-weight: 600; }
+.theme-agapi .env4-sound small { font-size: 14px; font-style: italic; }
 
 /* paintings on paper: the paper has no edge, the painting fades into the page on all four sides.
    `multiply` reaches the chapter's colour only if nothing in between starts a layer of its own. */

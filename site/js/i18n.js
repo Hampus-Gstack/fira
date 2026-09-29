@@ -9,7 +9,7 @@ window.FIRA_I18N = {
     locale: "en-GB",
     // envelope
     for: "For", teaser: "You are invited", tapToOpen: "Tap to open", tapSeal: "Tap the seal to open",
-    soundHint: "Turn your sound on", openInvitation: "Open the invitation", opening: "Opening…",
+    soundHint: "Turn your sound on", soundWhy: "Turn the volume up before you open", openInvitation: "Open the invitation", opening: "Opening…",
     // chapters
     eyebrow: "You're invited", countdown: "The countdown", details: "When & where", venue: "The venue",
     schedule: "Schedule", dressCode: "Dress code", gifts: "Gifts", giftsDirect: "Prefer to contribute directly?",
@@ -30,12 +30,13 @@ window.FIRA_I18N = {
     fewer: "Fewer", more: "More",
     // chrome
     cta: "Confirm attendance", madeWith: "Made with Fira", toggleSound: "Sound on or off", toggleFullscreen: "Full screen on or off",
+    replay: "Open again", replayEnd: "Open the invitation again",
   },
 
   sv: {
     locale: "sv-SE",
     for: "Till", teaser: "Ni är inbjudna", tapToOpen: "Tryck för att öppna", tapSeal: "Tryck på sigillet för att öppna",
-    soundHint: "Slå på ljudet", openInvitation: "Öppna inbjudan", opening: "Öppnar…",
+    soundHint: "Slå på ljudet", soundWhy: "Höj volymen innan du öppnar", openInvitation: "Öppna inbjudan", opening: "Öppnar…",
     eyebrow: "Ni är inbjudna", countdown: "Nedräkning", details: "Tid & plats", venue: "Platsen",
     schedule: "Program", dressCode: "Klädkod", gifts: "Gåva", giftsDirect: "Vill ni hellre bidra direkt?",
     menu: "Meny", accommodation: "Boende", faq: "Frågor & svar", contact: "Kontakt", music: "Vår musik",
@@ -52,5 +53,6 @@ window.FIRA_I18N = {
     thanksYes: "Vi ses där,", thanksNo: "Tack för att du hör av dig,", hostedBy: "",
     fewer: "Färre", more: "Fler",
     cta: "OSA här", madeWith: "Skapad med Fira", toggleSound: "Ljud av eller på", toggleFullscreen: "Helskärm av eller på",
+    replay: "Öppna igen", replayEnd: "Öppna inbjudan igen",
   },
 };

@@ -476,6 +476,22 @@ class Suite:
                     expect(still_loading, f"{t['id']}: hero video is not playing: {state}")
                     slow.append(f"{t['id']} (its hero video is still buffering)")
             page.wait_for_selector(".cta-pill.show", timeout=8000)
+            # open it again: the sealed envelope as it came, once, with its sound hint, and nothing left behind
+            expect(page.locator(".story-foot .replay-end").count() == 1, f"{t['id']}: no 'open again' at the end of the story")
+            page.wait_for_selector(".replay.show", timeout=8000)
+            page.click(".replay")
+            page.wait_for_selector(".env4-tap", timeout=8000)
+            again = page.evaluate(
+                """(() => { const b = document.querySelector('.snd-toggle');
+                     return { stories: document.querySelectorAll('.story').length, songs: document.querySelectorAll('audio.inv-song').length,
+                              playing: [...document.querySelectorAll('audio.inv-song')].filter((a) => !a.paused).length,
+                              buttons: document.querySelectorAll('.snd-toggle, .replay').length, y: scrollY,
+                              toggle: b ? getComputedStyle(b).pointerEvents : 'none' }; })()"""
+            )
+            expect(again["stories"] <= 1 and again["songs"] == (1 if t["music"] else 0) and again["playing"] == 0 and again["y"] == 0,
+                   f"{t['id']}: 'open again' did not bring back one sealed envelope: {again}")
+            expect(again["toggle"] == "none", f"{t['id']}: the sound button can be tapped on the sealed envelope: {again}")
+            expect(page.is_visible(".env4-sound"), f"{t['id']}: sound hint missing on the envelope opened again")
             page.close()
             self.no_errors(f"film {t['id']}")
         for t in [t for t in self.themes() if t["music"]]:
