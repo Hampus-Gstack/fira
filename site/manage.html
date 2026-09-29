@@ -174,8 +174,11 @@
     const nfSave = document.getElementById("nfSave");
     if (nfSave) nfSave.addEventListener("click", async () => {
       const status = document.getElementById("nfStatus");
+      const email = document.getElementById("nfEmail").value.trim();
+      // The same rule as the server's, checked here first so a typo never leaves the page
+      if (email && !/^[^@\s<>,;"']{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$/.test(email)) { status.textContent = W.notifyBad; return; }
       try {
-        const res = await FiraAPI.setNotify(id, document.getElementById("nfEmail").value.trim(), key);
+        const res = await FiraAPI.setNotify(id, email, key);
         status.textContent = W.saved + " " + notifyState(res);
       } catch (err) {
         status.textContent = err.status === 422 ? W.notifyBad : W.notifyFail;
