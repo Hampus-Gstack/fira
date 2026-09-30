@@ -33,7 +33,7 @@ from urllib.parse import quote
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from e2e import PROD, REPO, local_site  # noqa: E402
+from e2e import PROD, REPO, local_site, pass_gate  # noqa: E402
 
 FILM = "document.querySelector('.hero-film, .env4-film')"
 PREVIEW = REPO / "site" / "_preview"
@@ -164,6 +164,12 @@ def main():
                           + (v ? ', loop ' + v.currentTime.toFixed(2) + (v.paused ? ' paused' : '') : '')
                           + (h && h.classList.contains('held') ? ', names held' : '')
                           + (document.documentElement.classList.contains('sealed') ? ', page sealed' : ''); }"""
+
+        if page.locator(".snd-gate").count():            # an envelope with music: the screen for the sound first
+            if not a.handover:
+                shot("the screen for the sound")
+            pass_gate(page, heard=None if a.handover else lambda: shot("the music plays: does the guest hear it?"))
+            page.wait_for_timeout(1600)                   # the card that says where to tap, and the rings on the seal
 
         if a.handover:
             page.click(".env4-tap")

@@ -73,7 +73,7 @@
         eyebrow: "Wedding Day", teaser: "With love", for: "For",
         countdown: "The Celebration Begins In", schedule: "Schedule of Events", venue: "Location",
         dressCode: "Dress Code", contact: "Details", rsvp: "Confirm Your Attendance",
-        yes: "Yes, I will attend", no: "No, I can't attend", hostedBy: "", cta: "Confirm attendance",
+        yes: "Yes, I will attend", no: "No, I can't attend", hostedBy: "",
         thanksYes: "We can't wait to celebrate with you,", thanksNo: "Thank you for letting us know,",
       }),
     },
@@ -92,7 +92,7 @@
       },
       storyBg: M + "bg-toscana.jpg",
       assets: { venue: M + "venue-toscana.jpg" },
-      heroFrame: true, timelineStyle: "icons", photoFrame: "oval", ctaStyle: "scroll",
+      heroFrame: true, timelineStyle: "icons", photoFrame: "oval",
       chapters: ["hero", "countdown", "venue", "schedule", "dresscode", "gifts", "menu", "photo", "accommodation", "faq", "rsvp"],
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "Finally, we do", teaser: "You are invited", for: "For",
@@ -101,7 +101,7 @@
         dressCode: "Dress code", gifts: "Gifts", giftsDirect: "Prefer to contribute directly?",
         menu: "Menu", accommodation: "Accommodation", accommodationSub: "Recommendations for your stay",
         faq: "FAQ", rsvp: "RSVP", replyBy: "Kindly reply by",
-        yes: "Yes, I will attend", no: "No, I can't attend", hostedBy: "With love,", cta: "Scroll to RSVP",
+        yes: "Yes, I will attend", no: "No, I can't attend", hostedBy: "With love,",
         thanksYes: "Grazie mille,", thanksNo: "Thank you for letting us know,",
       }),
       after(wrap, data, opts, U) {
@@ -142,7 +142,7 @@
                  "dresscode", "section:gift", "section:speeches", "photo", "song", "rsvp", "section:closing"],
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "We are getting married", teaser: "With love", countdown: "Not long now",
-        yes: "Yes, I will attend", no: "No, I can't attend", cta: "RSVP",
+        yes: "Yes, I will attend", no: "No, I can't attend",
         thanksYes: "Wonderful! See you there,",
       }),
       i18n: {
@@ -172,7 +172,7 @@
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "Together with their families", teaser: "You are warmly invited",
         schedule: "The day", details: "When & where", hostedBy: "With love,",
-        song: "♪ Our song", cta: "Confirm attendance",
+        song: "♪ Our song",
       }),
       decorate(stage, U) { U.particles(stage, "leaves", 12); },
       art: {
@@ -190,7 +190,7 @@
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "An evening to remember", teaser: "Your presence is requested",
         schedule: "Programme", details: "The particulars", hostedBy: "Hosted by",
-        song: "♪ The soundtrack", cta: "Reserve your place",
+        song: "♪ The soundtrack",
       }),
       decorate(stage, U) { U.particles(stage, "bokeh", 16); },
       art: {
@@ -208,7 +208,7 @@
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "It's a party", teaser: "Surprise inside!",
         schedule: "The plan", details: "Where the fun happens", hostedBy: "Thrown by",
-        song: "♪ The anthem", cta: "Count me in!",
+        song: "♪ The anthem",
       }),
       decorate(stage, U) { U.particles(stage, "confetti", 34); },
       after(wrap, data, opts, U) {
@@ -229,7 +229,7 @@
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "A little one is on the way", teaser: "Something sweet awaits",
         schedule: "The afternoon", details: "When & where", hostedBy: "Celebrating with",
-        song: "♪ Lullaby", cta: "Let them know",
+        song: "♪ Lullaby",
       }),
       decorate(stage, U) { U.particles(stage, "bubbles", 14); },
       art: {
@@ -253,7 +253,7 @@
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "One night only", teaser: "Access granted",
         schedule: "Lineup", details: "Coordinates", hostedBy: "Presented by",
-        song: "♪ Preview the sound", cta: "Claim your spot",
+        song: "♪ Preview the sound",
       }),
       decorate(stage, U) { U.particles(stage, "sparks", 22); },
       art: {
@@ -272,7 +272,7 @@
       labels: Object.assign({}, commonRsvp, {
         eyebrow: "Under the open sky", teaser: "Summer is calling",
         schedule: "The evening", details: "Find your way", hostedBy: "Skål from",
-        song: "♪ The playlist", cta: "Join the party",
+        song: "♪ The playlist",
       }),
       decorate(stage, U) { U.particles(stage, "petals", 18); },
       art: {

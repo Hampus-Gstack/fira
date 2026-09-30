@@ -114,6 +114,28 @@ def served_as_image(url):
         return False
 
 
+SONG_STATE = """(() => { const g = document.querySelector('.snd-gate'), a = document.querySelector('audio.inv-song');
+                   return { gate: g && g.dataset.state, t: a && a.currentTime, paused: a && a.paused, muted: a && a.muted,
+                            error: a && a.error && a.error.code, src: a && (a.currentSrc || '').split('/').pop() }; })()"""
+
+
+def pass_gate(page, heard=None, timeout=30000):
+    """The screen for the sound in front of an envelope with music: start the music, wait until it plays,
+    say it is heard. `heard` is called while the question is on screen. False when there is no such screen."""
+    if not page.locator(".snd-gate").count():
+        return False
+    page.click(".snd-gate .sg-go")
+    try:
+        page.wait_for_selector(".snd-gate[data-state=playing]", timeout=timeout)
+    except Exception:
+        raise Check(f"the music did not start on the screen for the sound: {page.evaluate(SONG_STATE)}")
+    if heard:
+        heard()
+    page.click(".snd-gate .sg-go")
+    page.wait_for_selector(".snd-gate", state="detached", timeout=5000)
+    return True
+
+
 PATIENCE = 1.0   # how many times longer than usual a wait may take; set from the speed of the line
 
 
@@ -236,10 +258,12 @@ class Suite:
     def open_envelope(self, page, film):
         if film:
             page.wait_for_selector(".env4-tap")
+            pass_gate(page)
             page.wait_for_function("document.querySelector('.hero-film, .env4-film').readyState >= 3", timeout=45000)
             page.click(".env4-tap")
         else:
             page.wait_for_selector(".env3-seal")
+            pass_gate(page)
             page.click(".env3-seal", force=True)  # the seal breathes, so it is never "stable"
         page.wait_for_function("!document.querySelector('.env4') && !document.querySelector('.env3')", timeout=30000)
         page.wait_for_selector(".story .ch-hero")
@@ -357,7 +381,6 @@ class Suite:
                       const r = w.document.querySelector('#rsvp').getBoundingClientRect(); return [Math.round(r.top), w.innerHeight, Math.round(w.scrollY)]; })()""")
             expect(top[2] > 1000 and top[0] < top[1] * 0.5, f"{name}: the page did not scroll the invitation to its reply form: {top}")
             expect(page.is_visible(".film-step:last-child .cap-ctas .btn-primary"), f"{name}: the last caption has no button")
-            expect(not inside.locator(".cta-pill").is_visible(), f"{name}: the invitation's own button shows inside the phone")
 
             go(0)
             page.click(".phone")                                            # a tap opens it: the page scrolls itself
@@ -393,8 +416,33 @@ class Suite:
             page.goto(self.url(f"i.html?demo={t['id']}&to=" + urllib.parse.quote("Anna & Johan")))
             page.wait_for_selector(".env4-tap")
             expect("Anna & Johan" in page.inner_text(".env4-addr"), f"{t['id']}: envelope is not addressed to the guest")
-            expect(page.is_visible(".env4-sound"), f"{t['id']}: sound hint missing on the sealed envelope")
-            expect(page.is_visible(".env4-hint"), f"{t['id']}: tap hint missing")
+            if t["music"]:
+                # the screen for the sound holds the envelope shut until the music plays and is heard
+                expect(page.is_visible(".snd-gate") and page.locator(".env4-sound").count() == 0,
+                       f"{t['id']}: an envelope with music needs the screen for the sound, and no sound card")
+                page.wait_for_timeout(800)
+                page.mouse.click(215, 820)                                  # beside the card, where the envelope is
+                page.wait_for_timeout(400)
+                shut = page.evaluate("""({ opening: document.querySelector('.env4').classList.contains('opening'),
+                                          hint: getComputedStyle(document.querySelector('.env4-hint')).visibility,
+                                          song: document.querySelector('audio.inv-song').paused })""")
+                expect(not shut["opening"] and shut["hint"] == "hidden" and shut["song"],
+                       f"{t['id']}: the envelope can be opened, or says so, before the music plays: {shut}")
+
+                def asked():
+                    s = page.evaluate(SONG_STATE)
+                    expect(s["t"] > 0 and not s["paused"] and not s["muted"], f"{t['id']}: the question is asked, but no music plays: {s}")
+                    page.click(".snd-gate .sg-no")                          # "I can't hear anything": help, and the music from its start
+                    page.wait_for_selector(".snd-gate[data-state=help] .sg-help", state="visible", timeout=3000)
+                    page.wait_for_timeout(400)
+                    s = page.evaluate(SONG_STATE)
+                    expect(s["t"] < 1.5 and not s["paused"], f"{t['id']}: 'I can't hear anything' did not play the music again from its start: {s}")
+
+                pass_gate(page, heard=asked)
+                page.wait_for_timeout(1400)
+            else:
+                expect(page.is_visible(".env4-sound"), f"{t['id']}: sound hint missing on the sealed envelope")
+            expect(page.is_visible(".env4-hint") and page.is_visible(".env4-ring"), f"{t['id']}: tap hint or the rings on the seal missing")
             if t["lands"]:
                 page.evaluate("scrollTo(0, 400)")
                 page.wait_for_timeout(250)
@@ -413,7 +461,7 @@ class Suite:
             page.wait_for_timeout(1600)
             state = page.evaluate(
                 """(() => { const f = document.querySelector('.hero-film, .env4-film'), h = document.querySelector('.ch-hero');
-                     const o = s => parseFloat(getComputedStyle(document.querySelector(s)).opacity);
+                     const o = s => { const el = document.querySelector(s); return el ? parseFloat(getComputedStyle(el).opacity) : 0; };
                      return { t: f.currentTime, muted: f.muted, addr: o('.env4-addr'), hint: o('.env4-hint'),
                               sound: o('.env4-sound'), toggle: document.querySelector('.snd-toggle').classList.contains('on'),
                               held: !!h && h.classList.contains('held') }; })()"""
@@ -475,23 +523,31 @@ class Suite:
                     still_loading = isinstance(state, dict) and not state["error"] and state["net"] == 2 and state["visible"]
                     expect(still_loading, f"{t['id']}: hero video is not playing: {state}")
                     slow.append(f"{t['id']} (its hero video is still buffering)")
-            page.wait_for_selector(".cta-pill.show", timeout=8000)
-            # open it again: the sealed envelope as it came, once, with its sound hint, and nothing left behind
+            # no shortcut to the reply: the hero says to scroll, and that the reply comes at the end
+            page.wait_for_selector(".ch-hero .ch-chevron .cue-words", state="visible", timeout=8000)
+            expect(page.locator(".ch-hero .cue-rsvp").count() == 1 and page.locator(".cta-pill").count() == 0,
+                   f"{t['id']}: the hero does not say that the reply is at the end, or a shortcut to it is back")
+            # open it again: the sealed envelope as it came, once, and nothing left behind. Music that was heard
+            # starts again at once, from its start; without music the sound card is there again.
             expect(page.locator(".story-foot .replay-end").count() == 1, f"{t['id']}: no 'open again' at the end of the story")
             page.wait_for_selector(".replay.show", timeout=8000)
             page.click(".replay")
             page.wait_for_selector(".env4-tap", timeout=8000)
+            page.wait_for_timeout(600)
             again = page.evaluate(
-                """(() => { const b = document.querySelector('.snd-toggle');
-                     return { stories: document.querySelectorAll('.story').length, songs: document.querySelectorAll('audio.inv-song').length,
-                              playing: [...document.querySelectorAll('audio.inv-song')].filter((a) => !a.paused).length,
+                """(() => { const b = document.querySelector('.snd-toggle'), songs = [...document.querySelectorAll('audio.inv-song')];
+                     return { stories: document.querySelectorAll('.story').length, songs: songs.length,
+                              playing: songs.filter((a) => !a.paused).length, at: songs.length ? songs[0].currentTime : -1,
+                              gate: !!document.querySelector('.snd-gate'), ready: document.querySelector('.env4').classList.contains('ready'),
                               buttons: document.querySelectorAll('.snd-toggle, .replay').length, y: scrollY,
                               toggle: b ? getComputedStyle(b).pointerEvents : 'none' }; })()"""
             )
-            expect(again["stories"] <= 1 and again["songs"] == (1 if t["music"] else 0) and again["playing"] == 0 and again["y"] == 0,
-                   f"{t['id']}: 'open again' did not bring back one sealed envelope: {again}")
+            expect(again["stories"] <= 1 and again["songs"] == (1 if t["music"] else 0) and again["y"] == 0 and again["ready"] and not again["gate"],
+                   f"{t['id']}: 'open again' did not bring back one sealed envelope, ready to open: {again}")
+            expect(again["playing"] == (1 if t["music"] else 0) and again["at"] < 4, f"{t['id']}: 'open again' did not start the music again from its start: {again}")
             expect(again["toggle"] == "none", f"{t['id']}: the sound button can be tapped on the sealed envelope: {again}")
-            expect(page.is_visible(".env4-sound"), f"{t['id']}: sound hint missing on the envelope opened again")
+            if not t["music"]:
+                expect(page.is_visible(".env4-sound"), f"{t['id']}: sound hint missing on the envelope opened again")
             page.close()
             self.no_errors(f"film {t['id']}")
         for t in [t for t in self.themes() if t["music"]]:
@@ -509,7 +565,20 @@ class Suite:
                      FiraInvite.render(d, document.getElementById('mount'), { skipEnvelope: true });
                      return { songs: document.querySelectorAll('audio.inv-song').length, button: !!document.querySelector('.snd-toggle') }; }""", t["id"])
             expect(off["songs"] == 0 and not off["button"], f"{t['id']}: `backgroundMusic: false` did not turn the music off: {off}")
+            # music that cannot start: the screen says so, and after a second try lets the guest on without it
+            page.evaluate("""(theme) => { const d = JSON.parse(JSON.stringify(FIRA_SAMPLES[theme])); d.backgroundMusic = 'media/no-such-song.mp3';
+                                 FiraInvite.render(d, document.getElementById('mount'), {}); }""", t["id"])
+            page.click(".snd-gate .sg-go")
+            page.wait_for_selector(".snd-gate[data-state=failed]", timeout=15000)
+            expect(not page.is_visible(".snd-gate .sg-no"), f"{t['id']}: a way on without music after the first failure")
+            page.click(".snd-gate .sg-go")
+            page.wait_for_selector(".snd-gate[data-state=failed] .sg-no", state="visible", timeout=15000)
+            page.click(".snd-gate .sg-no")
+            page.wait_for_selector(".snd-gate", state="detached", timeout=5000)
+            expect(page.evaluate("document.querySelector('.env4, .env3').classList.contains('ready')"),
+                   f"{t['id']}: after 'open without music' the envelope cannot be opened")
             page.close()
+            self.errors = [e for e in self.errors if "404" not in e]   # the missing song, on purpose
             self.no_errors(f"music {t['id']}")
         landing = [t for t in films if t["lands"]]
         if landing:
@@ -532,11 +601,12 @@ class Suite:
                      FiraInvite.render(JSON.parse(JSON.stringify(FIRA_SAMPLES[theme])), document.getElementById('mount'), { skipEnvelope: true });
                      await new Promise(r => setTimeout(r, 300));
                      scrollTo(0, 500); await new Promise(r => setTimeout(r, 300));
-                     return { before, after: document.documentElement.classList.contains('sealed'), moved: scrollY, envelope: !!document.querySelector('.env4') }; }""",
+                     return { before, after: document.documentElement.classList.contains('sealed'), moved: scrollY,
+                              envelope: !!document.querySelector('.env4'), gate: !!document.querySelector('.snd-gate') }; }""",
                 theme,
             )
             page.close()
-            expect(state["before"] and not state["after"] and state["moved"] == 500 and not state["envelope"],
+            expect(state["before"] and not state["after"] and state["moved"] == 500 and not state["envelope"] and not state["gate"],
                    f"{theme}: drawn again while sealed, the page stays locked: {state}")
             self.no_errors(f"film {theme} (light film, drawn again)")
         note = f" (slow on this connection: {', '.join(slow)})" if slow else ""
@@ -693,7 +763,7 @@ class Suite:
                 page.goto(self.url(f"i.html?demo={coded[0]['id']}"))
                 able = page.evaluate("!!(document.documentElement.requestFullscreen && document.fullscreenEnabled)")
                 self.open_envelope(page, film=False)
-                page.wait_for_selector(".cta-pill", state="attached", timeout=8000)
+                page.wait_for_selector(".replay", state="attached", timeout=8000)   # the open page has its buttons
                 shown = page.locator(".fs-toggle").count()
                 expect(shown == (1 if able else 0), f"full screen {'possible' if able else 'not possible'}, but the button is shown {shown} times")
                 expect(can or not able, "the test could not take full screen away from the browser")
@@ -828,11 +898,20 @@ class Suite:
         film = page.locator(".env4-tap").count() == 1
         expect("Anna & Johan" in page.inner_text(".env4-addr, .env3-addr"), "envelope is not addressed to the guest")
         self.open_envelope(page, film)
+        music = data.get("backgroundMusic")
+        if isinstance(music, str) and music:
+            s = page.evaluate(SONG_STATE)
+            expect(not s["paused"] and s["t"] > 0 and s["src"] == music.split("/")[-1], f"the invitation's own music is not what plays: {s}")
         expect((data.get("title") or "") in page.inner_text(".ch-hero"), "hero does not show the title")
         expect(page.evaluate("document.documentElement.lang") == (data.get("lang") or "en"), "page language does not match the invitation")
         chapters = page.locator(".ch").count()
         expect(chapters >= 5, f"only {chapters} chapters rendered")
         expect(page.locator("#rsvp .rf").count() == 1, "RSVP form missing")
+        expect(page.locator(".cta-pill").count() == 0, "a shortcut to the reply is on the page")
+        if data.get("rsvpContacts"):
+            under = page.evaluate("""(() => { const f = document.querySelector('#rsvp .rf'), h = document.querySelector('#rsvp .rf-help');
+                                       return !!(f && h && (f.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING)); })()""")
+            expect(under, "the numbers for questions are not under the reply form")
         expect(page.input_value("input[name=guest_name]") == "Anna & Johan", "guest name is not prefilled")
         height = page.evaluate("document.documentElement.scrollHeight")
         for y in range(0, height, 600):
@@ -918,13 +997,7 @@ class Suite:
         expect(guest_name in guest.inner_text(".env4-addr"), "envelope is not addressed to the guest")
         self.open_envelope(guest, film=True)
         expect(title in guest.inner_text(".ch-hero"), "hero does not show the title")
-        guest.wait_for_selector(".cta-pill.show", timeout=8000)
-        guest.click(".cta-pill")
-        try:
-            guest.wait_for_function("Math.abs(document.querySelector('#rsvp').getBoundingClientRect().top) <= 40", timeout=15000)
-        except Exception:
-            where = guest.evaluate("({rsvpTop: Math.round(document.querySelector('#rsvp').getBoundingClientRect().top), scrollY: Math.round(scrollY), height: document.documentElement.scrollHeight})")
-            raise Check(f"the RSVP button did not bring the form into view: {where}")
+        guest.wait_for_selector(".ch-hero .cue-rsvp", state="visible", timeout=8000)   # no shortcut: the hero says where the reply is
         for label, selector in (("main", ".ch-photo img"), ("second", ".rf-couple img"), ("attire", ".dc-img img >> nth=-1")):
             img = guest.locator(selector)
             img.scroll_into_view_if_needed()
@@ -944,7 +1017,6 @@ class Suite:
         guest.locator(".rf-send").scroll_into_view_if_needed()
         guest.click(".rf-send")
         guest.wait_for_selector(".rf-done", timeout=20000)
-        guest.wait_for_function("!document.querySelector('.cta-pill')", timeout=5000)
 
         # -- the guest changes their mind: the form comes back as it was sent, and the same reply is updated
         token = guest.evaluate("id => ((JSON.parse(localStorage.getItem('ohlala_replies') || '{}')[id] || [])[0] || {}).t || ''", invite_id)

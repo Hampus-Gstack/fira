@@ -505,27 +505,6 @@
     if (REDUCED) root.querySelectorAll(".reveal").forEach((el) => el.classList.add("in"));
   }
 
-  // ---------- scroll to a chapter and stay on target ----------
-  // Images above the target may finish loading while the page glides and push it further down,
-  // so re-aim until it rests at the top. Any input from the guest cancels the correction.
-  function glideTo(el) {
-    const behavior = REDUCED ? "auto" : "smooth";
-    const atEnd = () => innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
-    let last = null, calm = 0, tries = 0;
-    const stop = () => { clearInterval(timer); ["wheel", "touchstart", "keydown"].forEach((e) => removeEventListener(e, stop)); };
-    const timer = setInterval(() => {
-      const top = Math.round(el.getBoundingClientRect().top);
-      calm = top === last ? calm + 1 : 0;
-      last = top;
-      if (calm < 2) return;
-      if (Math.abs(top) > 6 && tries < 4 && !atEnd()) { tries++; calm = 0; el.scrollIntoView({ behavior, block: "start" }); }
-      else stop();
-    }, 200);
-    ["wheel", "touchstart", "keydown"].forEach((e) => addEventListener(e, stop, { passive: true, once: true }));
-    setTimeout(stop, 8000);
-    el.scrollIntoView({ behavior, block: "start" });
-  }
-
   // ---------- fullscreen ----------
   function tryFullscreen() {
     const el = document.documentElement;
@@ -615,7 +594,11 @@
           ${split ? "" : `<p class="inv-date hero-seq s5">${dateLine}</p>`}
           ${data.heroNote ? `<p class="inv-hero-note hero-seq s5">${esc(data.heroNote)}</p>` : ""}
         </div>
-        <div class="ch-chevron hero-seq s6" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 9l7 7 7-7"/></svg></div>`;
+        <div class="ch-chevron hero-seq s6" aria-hidden="true">
+          <span class="cue-words">${T("scrollDown")}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 9l7 7 7-7"/></svg>
+          ${opts && opts._rsvp && !replied(opts.inviteId) ? `<span class="cue-rsvp">${T("rsvpAtEnd")}</span>` : ""}
+        </div>`;
       const pin = seq ? (Number(o.pin) > 0 ? Number(o.pin) : 1.1) : 0;
       const cls = ["ch", "ch-hero", hasBg ? "has-bg" : "", split ? "hero-split" : "", staged ? "hero-staged" : "", held ? "held" : ""];
       return `
@@ -967,6 +950,7 @@
         return `<label class="rf-field rf-yes"><span>${label}</span><input type="text" data-q="${i}" maxlength="200" placeholder="${esc(q.placeholder || "")}"></label>`;
       }).join("");
       const deadline = data.rsvpDeadlineText || (data.rsvpDeadline ? `${word("replyBy")} ${fmtDate(data.rsvpDeadline, true)}` : "");
+      // Numbers for questions, under the form: above it they read as "reply by phone".
       const contacts = (data.rsvpContacts || []).filter((c) => c.name || c.phone).map((c) => {
         const tel = String(c.phoneHref || c.phone || "").replace(/[^\d+]/g, "");
         return `<li>${c.name ? `<b>${esc(c.name)}</b>` : ""}${c.phone ? `<a href="tel:${esc(tel)}">${esc(c.phone)}</a>` : ""}</li>`;
@@ -978,7 +962,6 @@
           ${h2(word("rsvp"))}
           ${data.rsvpIntro ? paragraphs(data.rsvpIntro, "inv-p") : ""}
           ${deadline ? `<p class="rf-deadline reveal">${esc(deadline)}</p>` : ""}
-          ${contacts ? `<ul class="rf-contacts reveal">${contacts}</ul>` : ""}
           <form class="rf reveal" novalidate>
             <label class="rf-field"><span>${T("yourName")}</span><input type="text" name="guest_name" required maxlength="120" value="${esc(opts.guestName || "")}"></label>
             ${data.collectEmail ? `<label class="rf-field"><span>${T("email")}</span><input type="email" name="email" maxlength="160" placeholder="${T("emailPlaceholder")}"></label>` : ""}
@@ -995,6 +978,7 @@
             <button type="submit" class="rf-send">${T("send")}</button>
             <p class="rf-status" aria-live="polite"></p>
           </form>
+          ${contacts ? `<div class="rf-help reveal"><p>${T("contactsLead")}</p><ul class="rf-contacts">${contacts}</ul></div>` : ""}
           ${data.closingText ? `<p class="rf-closing reveal">${esc(data.closingText)}</p>` : ""}
           ${data.hosts && !data.hideRsvpHosts ? `<p class="rf-hosts reveal">${T("hostedBy")} ${esc(data.hosts)}</p>` : ""}
           ${couple ? `<figure class="rf-couple reveal"><img src="${esc(couple)}" alt="" loading="lazy"></figure>` : ""}
@@ -1105,6 +1089,7 @@
     save(inviteId, token, name) { this.put(inviteId, [{ t: token, n: name }].concat(this.list(inviteId).filter((x) => x.t !== token))); },
     drop(inviteId, token) { this.put(inviteId, this.list(inviteId).filter((x) => x.t !== token)); },
   };
+  const replied = (inviteId) => !!(inviteId && replyStore.list(inviteId).length);
   const REPLY_KEY = /^[A-Za-z0-9_-]{16}$/;
   const EMAIL_LIKE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -1138,8 +1123,6 @@
       });
       form.style.display = "none";
       answered.style.display = "";
-      const pill = document.querySelector(".cta-pill");
-      if (pill) pill.remove();
     }
 
     // The form as the reply was sent, so a change starts from what the guest said
@@ -1290,13 +1273,15 @@
     : esc(data.envelopeTeaser || word("teaser")));
 
   // Sound: the opening film, and the music of the invitation (`backgroundMusic`, else the theme's
-  // `music`). Browsers allow sound only from inside a tap, so the music starts with the tap that opens
-  // the envelope, or with the first tap on the sound button, and loops from there on.
+  // `music`). Browsers allow sound only from inside a tap. An envelope with music has a screen of its
+  // own before it (soundGate): its tap starts the music, and the guest says they hear it before the
+  // envelope can be opened. Without that screen (a preview, `startMuted`) the music starts with the tap
+  // on the envelope or on the sound button, and loops from there on.
   // A quarter of a second of silence. Played from inside the tap, it earns the player the right to
   // start the music later, when the opening film has arrived and the line is free for it.
   const SILENCE = "data:audio/wav;base64,UklGRhYIAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgATElTVBoAAABJTkZPSVNGVA4AAABMYXZmNjIuMTIuMTAyAGRhdGHQBwAAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIA=";
   const soundState = {
-    on: false, media: [], song: null, started: false, waiting: false, btn: null,
+    on: false, media: [], song: null, started: false, waiting: false, btn: null, heard: false,
     set(v) {
       this.on = v;
       this.media.forEach((m) => (m.muted = !v));
@@ -1327,6 +1312,21 @@
       const p = this.song.play();
       if (p && p.catch) p.catch(() => { this.started = false; this.waiting = false; });
     },
+    // Call from inside a tap: the music itself, aloud, from its start. Returns the promise of play().
+    begin() {
+      const s = this.song;
+      if (!s) return Promise.reject(new Error("no music"));
+      this.started = true; this.waiting = false; this.on = true;
+      if (s.error || s.getAttribute("src") !== s.dataset.src) s.src = s.dataset.src;   // a failed load is tried again
+      s.loop = true;
+      s.muted = false;
+      try { if (s.currentTime > 0) s.currentTime = 0; } catch (e) { /* not loaded yet: it starts at 0 */ }
+      // Safari 17+: play as music does, not as a sound of the page, so that silent mode leaves it alone.
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+      if (this.btn) this.btn.classList.add("on");
+      const p = s.play();
+      return p && p.then ? p : Promise.resolve();
+    },
     go() {                         // the line is free: the music itself
       if (!this.song || !this.started || !this.waiting) return;
       this.waiting = false;
@@ -1344,7 +1344,7 @@
     },
     reset() {
       if (this.song) { this.song.pause(); this.song.removeAttribute("src"); }
-      this.on = false; this.media = []; this.song = null; this.started = false; this.waiting = false; this.btn = null;
+      this.on = false; this.media = []; this.song = null; this.started = false; this.waiting = false; this.btn = null; this.heard = false;
     },
   };
   document.addEventListener("visibilitychange", () => {   // no music from a page nobody is looking at
@@ -1370,8 +1370,104 @@
 
   // The sound hint on a sealed envelope. Guests opened the invitation with their phone turned down and
   // never heard it (Hampus, 2026-09-29), so it is a card of its own, above the words that say "tap".
+  const SPEAKER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path class="w1" d="M15.5 8.5a5 5 0 010 7"/><path class="w2" d="M18.5 5.5a9 9 0 010 13"/></svg>`;
   const soundHint = () => `
-      <p class="env4-sound"><span class="snd-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path class="w1" d="M15.5 8.5a5 5 0 010 7"/><path class="w2" d="M18.5 5.5a9 9 0 010 13"/></svg></span><span class="snd-words"><b>${T("soundHint")}</b><small>${T("soundWhy")}</small></span></p>`;
+      <p class="env4-sound"><span class="snd-ic" aria-hidden="true">${SPEAKER}</span><span class="snd-words"><b>${T("soundHint")}</b><small>${T("soundWhy")}</small></span></p>`;
+
+  // The screen before an envelope with music. Guests opened the invitation without hearing it: the
+  // music started with the tap on the envelope, and a phone turned down, or a tap the browser did not
+  // count, left it silent (guests of a real invitation, 2026-09-30). Here the first tap starts the music
+  // itself, and the envelope can be opened once the guest has said they hear it. A page cannot read the
+  // phone's volume: the music must be playing, and the guest's word is the rest of the check. The volume
+  // buttons of a phone change the volume of what plays, so the guest turns up music they already hear.
+  // Only when the music cannot start at all, twice, is there a way on without it.
+  function soundGate(stage, onPass) {
+    const song = soundState.song;
+    const gate = document.createElement("div");
+    gate.className = "snd-gate";
+    gate.setAttribute("role", "dialog");
+    gate.setAttribute("aria-modal", "true");
+    gate.setAttribute("aria-labelledby", "sg-title");
+    gate.innerHTML = `
+      <div class="sg-card">
+        <div class="sg-icon" aria-hidden="true">${SPEAKER}<span class="sg-eq"><i></i><i></i><i></i><i></i></span></div>
+        <h2 class="sg-title" id="sg-title"></h2>
+        <p class="sg-text" aria-live="polite"></p>
+        <button type="button" class="sg-go"></button>
+        <ul class="sg-help"><li>${T("gateTip1")}</li><li>${T("gateTip2")}</li><li>${T("gateTip3")}</li></ul>
+        <button type="button" class="sg-no"></button>
+      </div>`;
+    stage.appendChild(gate);
+    const $ = (s) => gate.querySelector(s);
+    const WORDS = {                // title, text, main button, second button
+      ask: ["gateTitle", "gateText", "gateStart", ""],
+      starting: ["gateTitle", "gateText", "gateStarting", ""],
+      playing: ["gateHear", "gateVolume", "gateYes", "gateNo"],
+      help: ["gateHear", "gateVolume", "gateYes", "gateAgain"],
+      failed: ["gateFailed", "gateFailedText", "gateRetry", "gateWithout"],
+    };
+    let tries = 0, timer = 0, passed = false;
+    const show = (state) => {
+      const w = WORDS[state];
+      gate.dataset.state = state;
+      $(".sg-title").textContent = word(w[0]);
+      $(".sg-text").textContent = word(w[1]);
+      $(".sg-go").textContent = word(w[2]);
+      const second = state === "failed" && tries < 2 ? "" : w[3];   // no way on without music after one failure
+      $(".sg-no").textContent = second ? word(second) : "";
+      $(".sg-no").hidden = !second;
+    };
+    const playing = () => {        // the music has started: now the question
+      clearTimeout(timer);
+      if (!passed && ["ask", "starting", "failed"].includes(gate.dataset.state)) show("playing");
+    };
+    const failed = () => {
+      clearTimeout(timer);
+      if (!passed) show("failed");
+    };
+    song.addEventListener("playing", playing);
+    song.addEventListener("error", failed);
+    const start = () => {          // inside a tap
+      tries++;
+      show("starting");
+      clearTimeout(timer);
+      timer = setTimeout(() => { if (song.paused || !(song.currentTime > 0)) failed(); }, 12000);
+      soundState.begin().then(playing, (e) => { if (!e || e.name !== "AbortError") failed(); });
+    };
+    const pass = (withMusic) => {
+      if (passed) return;
+      passed = true;
+      clearTimeout(timer);
+      song.removeEventListener("playing", playing);
+      song.removeEventListener("error", failed);
+      soundState.heard = withMusic;
+      soundState.set(withMusic);
+      gate.classList.add("leaving");
+      setTimeout(() => gate.remove(), 450);
+      onPass();
+    };
+    $(".sg-go").addEventListener("click", () => {
+      const state = gate.dataset.state;
+      if (state === "playing" || state === "help") pass(true);
+      else start();
+    });
+    $(".sg-no").addEventListener("click", () => {
+      if (gate.dataset.state === "failed") return pass(false);
+      show("help");                // and the music again from its start, inside this tap
+      soundState.begin().catch(() => {});
+    });
+    show("ask");
+    return gate;
+  }
+
+  // Music that the guest starts on the screen before the envelope, not with the envelope's tap.
+  const gatedSound = (opts) => !!soundState.song && !opts.startMuted;
+
+  // Where to tap: rings go out from the seal (sealPos, sealSize: where the seal is in the picture).
+  const sealRing = (o) => {
+    const sp = o.sealPos || { x: 50, y: 50 };
+    return `<div class="env4-ring" aria-hidden="true" style="left:${Number(sp.x) || 50}%;top:${Number(sp.y) || 50}%;--seal-k:${(Number(o.sealSize) || 24) / 100}"></div>`;
+  };
 
   // After the tap: play the film, with sound if the browser allows it. While the film is still on its
   // way (a slow connection), the hint says so. `done` is called once: when the film has ended or failed,
@@ -1395,7 +1491,9 @@
     soundState.start(film.muted);
     soundState.set(!film.muted);
     const p = film.play();
-    if (p && p.catch) p.catch(() => { film.muted = true; soundState.set(false); film.play().catch(done); });
+    // Refused with sound, it plays without. The music keeps playing: it was started by a tap of its own,
+    // and silencing it here would leave the guest with no sound at all.
+    if (p && p.catch) p.catch(() => { film.muted = true; if (!soundState.song) soundState.set(false); film.play().catch(done); });
   }
 
   // The film IS the envelope: its first frame is the sealed envelope, a tap plays it with sound.
@@ -1411,7 +1509,8 @@
       <div class="env4-scrim"></div>
       <p class="env4-addr">${address(data, opts)}</p>
       ${mono}
-      ${soundHint()}
+      ${sealRing(o)}
+      ${gatedSound(opts) ? "" : soundHint()}
       <p class="env4-hint">${T("tapToOpen")}</p>
       <button class="env4-tap" aria-label="${T("openInvitation")}"></button>`;
     mount.appendChild(env);
@@ -1486,8 +1585,7 @@
     film.preload = "auto";
     film.poster = o.poster;
     heroStage.insertBefore(film, heroStage.querySelector(".hero-scrim"));
-    let wanted = false;                            // a tap that came before the film was chosen
-    pickFilm(o).then((src) => { film.src = src; film.load(); if (wanted) open(); });
+    pickFilm(o).then((src) => { if (!film.getAttribute("src")) { film.src = src; film.load(); } });
 
     const env = document.createElement("div");
     env.className = "env4 env4-clear";            // no picture of its own: the hero behind it is the envelope
@@ -1495,7 +1593,8 @@
       <div class="env4-scrim"></div>
       <p class="env4-addr">${address(data, opts)}</p>
       ${o.monogram === false ? "" : `<div class="env4-mono" style="left:${Number(sp.x) || 50}%;top:${Number(sp.y) || 50}%;--seal-k:${(Number(o.sealSize) || 24) / 100}">${esc(monogram(data))}</div>`}
-      ${soundHint()}
+      ${sealRing(o)}
+      ${gatedSound(opts) ? "" : soundHint()}
       <p class="env4-hint">${T("tapToOpen")}</p>
       <button class="env4-tap" aria-label="${T("openInvitation")}"></button>`;
     stage.appendChild(env);
@@ -1568,7 +1667,9 @@
     function open(e) {
       if (opened) return;
       if (e && e.isTrusted !== false) soundState.start(!!opts.startMuted, !fed);   // sound is allowed from inside a tap only
-      if (!film.getAttribute("src")) { wanted = true; return; }   // it opens as soon as the film is chosen
+      // Tapped before the line was measured: the light film, now. Played later, outside the tap, an
+      // iPhone would refuse it with sound.
+      if (!film.getAttribute("src")) { film.src = o.videoLight || o.video; film.load(); }
       opened = true;
       if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
       if (!opts.noFullscreen) tryFullscreen();
@@ -1635,7 +1736,7 @@
     if (chromeCleanup) chromeCleanup();
     soundState.reset();
     mount.innerHTML = "";
-    document.querySelectorAll(".cta-pill, .fs-toggle, .snd-toggle, .replay, .celebrate-canvas").forEach((el) => el.remove());
+    document.querySelectorAll(".fs-toggle, .snd-toggle, .replay, .snd-gate, .celebrate-canvas").forEach((el) => el.remove());
     mount.className = "inv-root theme-" + theme.id;
     document.documentElement.lang = LBL._lang;
     if (theme.fonts && !document.getElementById("f-" + theme.id)) {
@@ -1658,11 +1759,24 @@
     const lands = film && Number(o.lands) > 0;      // the film ends on the hero picture and plays inside it
 
     // Open the invitation again: the sealed envelope as it came, with its film and its music from the
-    // start. For a guest who opened it with the sound off, or wants to see it once more.
+    // start. A guest who heard the music and still has it on gets it again at once, from this tap;
+    // one who turned it off meets the screen for the sound again.
     const sealedFirst = !opts.skipEnvelope && !REDUCED;
     const replay = () => {
+      const heard = soundState.heard && soundState.on;
       scrollTo(0, 0);
-      render(data, mount, opts);
+      render(data, mount, Object.assign({}, opts, { _heard: heard }));
+    };
+    // The envelope opens to a tap once the music plays and the guest has said they hear it.
+    const guard = (env) => {
+      if (!gatedSound(opts)) return env.classList.add("ready");
+      if (opts._heard) {
+        soundState.heard = true;
+        soundState.begin().catch(() => soundState.set(false));
+        return env.classList.add("ready");
+      }
+      env.classList.add("gated");
+      soundGate(stage, () => { env.classList.remove("gated"); env.classList.add("ready"); });
     };
 
     // `held`: the story is built behind the sealed envelope and waits there until the film has landed.
@@ -1673,7 +1787,7 @@
       const wrap = document.createElement("div");
       wrap.className = "story";
       const order = (Array.isArray(data.chapters) && data.chapters.length ? data.chapters : theme.chapters) || DEFAULT_ORDER;
-      const chapterOpts = Object.assign({}, opts, { _held: !!held });
+      const chapterOpts = Object.assign({}, opts, { _held: !!held, _rsvp: !opts.noRsvp && order.includes("rsvp") });
       wrap.innerHTML = `
         ${theme.storyBg ? `<div class="story-bg" aria-hidden="true"><img src="${esc(theme.storyBg)}" alt=""></div>` : ""}
         <div class="story-progress" aria-hidden="true"><i></i></div>
@@ -1703,7 +1817,9 @@
       return chrome;
     };
 
-    // The reply shortcut, "open again" and the full-screen button: they belong to the open page.
+    // "Open again" and the full-screen button: they belong to the open page. There is no shortcut to the
+    // reply: it skipped the walk into the story (a couple's feedback, 2026-09-30). The hero says to scroll, and
+    // that the reply comes at the end.
     const addChrome = (wrap) => {
       if (sealedFirst) {                              // at the top of the page; it steps aside while the guest reads
         const again = document.createElement("button");
@@ -1717,24 +1833,6 @@
         chromeCleanup = () => { removeEventListener("scroll", away); chromeCleanup = null; };
         away();
         setTimeout(() => again.classList.add("show"), 1600);
-      }
-      if (!opts.noRsvp && wrap.querySelector("#rsvp")) {
-        const pill = document.createElement("button");
-        pill.className = "cta-pill" + (theme.ctaStyle === "scroll" ? " cta-scroll" : "");
-        pill.innerHTML = theme.ctaStyle === "scroll"
-          ? `<span>${T("cta")}</span><i class="mouse" aria-hidden="true"></i>`
-          : T("cta");
-        pill.addEventListener("click", () => glideTo(wrap.querySelector("#rsvp")));
-        stage.appendChild(pill);
-        setTimeout(() => pill.classList.add("show"), 2400);
-        // It steps aside at the reply form and at the end of the story, where "open again" is.
-        const inView = new Set();
-        const io = new IntersectionObserver((es) => {
-          es.forEach((e) => (e.isIntersecting ? inView.add(e.target) : inView.delete(e.target)));
-          pill.classList.toggle("hide", inView.size > 0);
-        }, { threshold: 0.2 });
-        io.observe(wrap.querySelector("#rsvp"));
-        io.observe(wrap.querySelector(".story-foot"));
       }
       if (!opts.skipEnvelope && !opts.noFullscreen && canFullscreen()) {
         const fs = document.createElement("button");
@@ -1753,13 +1851,13 @@
     }
     if (lands) {
       const chrome = showStory(true);
-      landingOpening(stage, data, theme, opts, chrome);
+      guard(landingOpening(stage, data, theme, opts, chrome));
       soundToggle(stage);
     } else if (film) {
-      filmEnvelope(stage, data, theme, opts, () => showStory(false));
+      guard(filmEnvelope(stage, data, theme, opts, () => showStory(false)));
       soundToggle(stage);
     } else {
-      envelope(stage, data, theme, opts, () => showStory(false));
+      guard(envelope(stage, data, theme, opts, () => showStory(false)));
       if (soundState.song) soundToggle(stage);
     }
   }

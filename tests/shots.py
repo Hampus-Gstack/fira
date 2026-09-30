@@ -23,7 +23,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from e2e import PROD, REPO, local_site  # noqa: E402
+from e2e import PROD, REPO, local_site, pass_gate  # noqa: E402
 
 
 def sheet(frames_dir, out, columns=6, width=300):
@@ -88,6 +88,10 @@ def main():
             if theme["film"]:
                 page.wait_for_function("document.querySelector('.hero-film, .env4-film').readyState >= 3", timeout=45000)
             page.wait_for_timeout(2800)
+            if page.locator(".snd-gate").count():        # an envelope with music: the screen for the sound first
+                shot("gate")
+                pass_gate(page)
+                page.wait_for_timeout(1600)
             shot("sealed")
             if theme["film"] and args.film:
                 page.click(".env4-tap")
