@@ -1486,10 +1486,11 @@
     }, { once: true });
     film.addEventListener("ended", done);
     film.addEventListener("error", done);
-    film.muted = !!opts.startMuted;
-    if (soundState.song) film.volume = 0.7;      // the film's own sound sits under the music
-    soundState.start(film.muted);
-    soundState.set(!film.muted);
+    // With music the film is silent: the music already plays, and the film's own sounds (paper, chime,
+    // wings) over it were heard as a stray sound on the tap (2026-10-01). Without music they are the sound.
+    film.muted = !!opts.startMuted || !!soundState.song;
+    soundState.start(!!opts.startMuted);
+    soundState.set(!opts.startMuted);
     const p = film.play();
     // Refused with sound, it plays without. The music keeps playing: it was started by a tap of its own,
     // and silencing it here would leave the guest with no sound at all.
@@ -1535,7 +1536,7 @@
       playFilm(env, film, opts, finish);
     };
     env.querySelector(".env4-tap").addEventListener("click", open);
-    soundState.bind(film);
+    if (!soundState.song) soundState.bind(film);   // with music the film stays silent, whatever the sound button says
     return env;
   }
 
@@ -1683,7 +1684,7 @@
       requestAnimationFrame(watch);
     }
     env.querySelector(".env4-tap").addEventListener("click", open);
-    soundState.bind(film);
+    if (!soundState.song) soundState.bind(film);   // with music the film stays silent, whatever the sound button says
     return env;
   }
 

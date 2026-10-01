@@ -467,7 +467,10 @@ class Suite:
                               held: !!h && h.classList.contains('held') }; })()"""
             )
             expect(state["t"] > 0.5, f"{t['id']}: film did not start ({state['t']:.2f}s)")
-            expect(not state["muted"] and state["toggle"], f"{t['id']}: film did not start with sound on")
+            if t["music"]:   # the music plays already: the film's own sounds would be a stray sound on the tap
+                expect(state["muted"] and state["toggle"], f"{t['id']}: with music the film must be silent and the sound on: {state}")
+            else:
+                expect(not state["muted"] and state["toggle"], f"{t['id']}: film did not start with sound on")
             for key in ("addr", "hint", "sound"):
                 expect(state[key] < 0.15, f"{t['id']}: envelope overlay '{key}' still visible during the film (opacity {state[key]:.2f})")
             if t["lands"]:
